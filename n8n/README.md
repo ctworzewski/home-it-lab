@@ -1,700 +1,318 @@
-\# ⚙️ n8n – IT Infrastructure Automation
+# ⚙️ n8n -- IT Infrastructure Automation
 
+> Automatyzacje infrastruktury IT tworzone w **n8n** w ramach mojego
+> Home IT Lab.
 
+Repozytorium zawiera praktyczne projekty łączące monitoring,
+administrację systemami Windows, PowerShell, webhooki, API oraz lokalne
+modele LLM.
 
-Ten katalog zawiera workflow oraz dokumentację automatyzacji IT tworzonych w \*\*n8n\*\* w ramach mojego Home Lab.
+Głównym założeniem jest automatyzacja powtarzalnych zadań
+administracyjnych oraz budowa mechanizmów:
 
+**Detect → Analyze → Remediate → Verify → Escalate**
 
+------------------------------------------------------------------------
 
-Celem jest integracja monitoringu, systemów Windows/Linux, narzędzi bezpieczeństwa oraz lokalnych modeli LLM w celu automatyzacji diagnostyki i reakcji na zdarzenia infrastrukturalne.
+## 🧰 Technologie
 
+![n8n](https://img.shields.io/badge/n8n-Workflow_Automation-FF6D5A)
+![PowerShell](https://img.shields.io/badge/PowerShell-Automation-5391FE)
+![Windows](https://img.shields.io/badge/Windows-Administration-0078D4)
+![Zabbix](https://img.shields.io/badge/Zabbix-Monitoring-D40000)
+![Ollama](https://img.shields.io/badge/Ollama-Local_LLM-333333)
+![JSON](https://img.shields.io/badge/Data-JSON-555555)
 
+W projektach wykorzystywane są m.in.:
 
-\---
+-   n8n,
+-   PowerShell,
+-   Windows,
+-   Zabbix,
+-   SSH,
+-   REST API,
+-   Webhooki,
+-   JSON,
+-   Ollama / lokalne modele LLM,
+-   SMTP / powiadomienia e-mail.
 
+------------------------------------------------------------------------
 
+# 🚀 Projekty
 
-\## 🏗️ Architektura
+## 1. Zabbix Agent Auto-Remediation
 
+**Status:** ✅ działa / przetestowane
 
+Automatyzacja reagująca na niedostępność usługi **Zabbix Agent** na
+komputerze Windows.
 
-Główny kierunek integracji:
+Zabbix przekazuje zdarzenie do n8n przez webhook. Workflow wykonuje
+zdalną diagnostykę przez SSH i PowerShell, podejmuje próbę
+automatycznego uruchomienia usługi, a następnie weryfikuje rezultat.
 
+Jeżeli naprawa się nie powiedzie, dane diagnostyczne mogą zostać
+przekazane do lokalnego modelu LLM przez **Ollama**, który przygotowuje
+rekomendacje dla administratora.
 
-
-```text
-
-Monitoring
-
-&#x20;   ↓
-
-Zabbix / Wazuh
-
-&#x20;   ↓
-
+``` text
+Zabbix
+   |
+   v
 Webhook
-
-&#x20;   ↓
-
-n8n
-
-&#x20;   ↓
-
-Klasyfikacja zdarzenia
-
-&#x20;   ↓
-
-SSH / API / PowerShell
-
-&#x20;   ↓
-
-Diagnostyka
-
-&#x20;   ↓
-
-Auto-Remediation
-
-&#x20;   ↓
-
+   |
+   v
+  n8n
+   |
+   v
+SSH / PowerShell
+   |
+   v
+Próba naprawy
+   |
+   v
 Weryfikacja
-
-&#x20;   ↓
-
-Ollama / LLM
-
-&#x20;   ↓
-
-Powiadomienie / Eskalacja
-
+  / \
+ /   \
+OK   FAILED
+ |      |
+ |      v
+ |   Diagnostyka
+ |      |
+ |      v
+ |   Ollama / LLM
+ |      |
+ v      v
+    E-mail
 ```
 
+### Główne elementy
 
+-   wykrycie problemu przez Zabbix,
+-   przekazanie zdarzenia do n8n,
+-   zdalne wykonanie PowerShell,
+-   próba uruchomienia usługi,
+-   weryfikacja stanu usługi,
+-   diagnostyka po nieudanej naprawie,
+-   analiza przez lokalny LLM,
+-   powiadomienie administratora.
 
-\---
+➡️ **[Dokumentacja projektu](zabbix-auto-remediation/README.md)**
 
+------------------------------------------------------------------------
 
+## 2. Windows Update Automation
 
-\## 🚀 Projekty
+**Status:** ✅ działa / przetestowane
 
+Automatyzacja obsługi aktualizacji Windows wykorzystująca **PowerShell,
+Windows Task Scheduler oraz n8n**.
 
+Projekt zawiera dwa niezależne procesy:
 
-\### ✅ Zabbix Agent Auto-Remediation
+-   **CHECK** --- monitoruje dostępność aktualizacji i wysyła raport,
+-   **INSTALL** --- pobiera i instaluje aktualizacje, analizuje wynik,
+    wykrywa wymagany restart i raportuje rezultat.
 
+CHECK oraz INSTALL są niezależnymi zadaniami. Każdy proces posiada
+własny skrypt PowerShell, własny webhook n8n i może być uruchamiany
+osobno przez Windows Task Scheduler.
 
-
-\*\*Status:\*\* działa / przetestowane
-
-
-
-Automatyczna reakcja na niedostępność usługi \*\*Zabbix Agent\*\* na systemie Windows.
-
-
-
-Workflow odbiera zdarzenie z Zabbixa, podejmuje próbę automatycznej naprawy, weryfikuje rezultat, a w przypadku niepowodzenia uruchamia dodatkową diagnostykę i analizę przy użyciu lokalnego modelu LLM.
-
-
-
-\### Workflow
-
-
-
-```text
-
-Zabbix
-
-&#x20;   ↓
-
-Webhook
-
-&#x20;   ↓
-
-n8n
-
-&#x20;   ↓
-
-SSH
-
-&#x20;   ↓
-
-PowerShell
-
-&#x20;   ↓
-
-Próba uruchomienia Zabbix Agent
-
-&#x20;   ↓
-
-Weryfikacja stanu usługi
-
-&#x20;   ↓
-
-&#x20;   ├── SUCCESS
-
-&#x20;   │      ↓
-
-&#x20;   │   E-mail: usługa została przywrócona
-
-&#x20;   │
-
-&#x20;   └── FAILED
-
-&#x20;          ↓
-
-&#x20;      Diagnostyka Windows
-
-&#x20;          ↓
-
-&#x20;      Pobranie informacji o usłudze
-
-&#x20;          ↓
-
-&#x20;      Analiza przez Ollama / LLM
-
-&#x20;          ↓
-
-&#x20;      Sugestie diagnostyczne
-
-&#x20;          ↓
-
-&#x20;      E-mail: wymagana interwencja administratora
-
+``` text
+           Windows Update Automation
+                    |
+          +---------+---------+
+          |                   |
+          v                   v
+        CHECK               INSTALL
+          |                   |
+          v                   v
+     PowerShell          PowerShell
+          |                   |
+          v                   v
+   Windows Update       Windows Update
+          |                   |
+          v                   v
+     n8n Webhook          n8n Webhook
+          |                   |
+          v                   v
+   Raport e-mail       SUCCESS / FAILED
+                              |
+                              v
+                         Raport e-mail
 ```
 
+### Główne elementy
 
+-   Windows Update COM API,
+-   PowerShell,
+-   Windows Task Scheduler,
+-   osobne workflow CHECK i INSTALL,
+-   HTTPS POST / JSON,
+-   webhooki n8n,
+-   analiza `ResultCode` i `HRESULT`,
+-   wykrywanie wymaganego restartu,
+-   raportowanie e-mail.
 
-\---
+➡️ **[Dokumentacja projektu](windows-update-automation/README.md)**
 
+------------------------------------------------------------------------
 
+# 🏗️ Architektura Home IT Lab
 
-\## 🔧 Auto-Remediation
+n8n pełni rolę warstwy automatyzacji łączącej różne elementy
+laboratorium.
 
-
-
-Po wykryciu przez Zabbix niedostępności agenta n8n wykonuje zdalną próbę uruchomienia usługi.
-
-
-
-Przykładowa operacja PowerShell:
-
-
-
-```powershell
-
-Start-Service -Name "Zabbix Agent"
-
+``` text
+         Monitoring / Windows
+                  |
+          +-------+-------+
+          |               |
+          v               v
+       Zabbix       Windows Scripts
+          |               |
+          +-------+-------+
+                  |
+                  v
+             Webhook / API
+                  |
+                  v
+                 n8n
+                  |
+        +---------+---------+
+        |         |         |
+        v         v         v
+   PowerShell    SSH     Ollama / LLM
+        |         |         |
+        +---------+---------+
+                  |
+                  v
+        Raport / Remediacja
+                  |
+                  v
+            Administrator
 ```
 
+n8n nie zastępuje systemów monitoringu ani narzędzi administracyjnych.
+Pełni rolę warstwy integracyjnej i wykonawczej pomiędzy nimi.
 
+------------------------------------------------------------------------
 
-Po wykonaniu operacji następuje ponowne sprawdzenie stanu usługi.
+## 🤖 Lokalny LLM
 
+W części automatyzacji wykorzystywany jest lokalny model LLM uruchamiany
+przez **Ollama**.
 
+Aktualnie używany model:
 
-```powershell
-
-Get-Service -Name "Zabbix Agent"
-
-```
-
-
-
-Jeżeli usługa znajduje się w stanie:
-
-
-
-```text
-
-Running
-
-```
-
-
-
-workflow uznaje naprawę za zakończoną sukcesem.
-
-
-
-\---
-
-
-
-\## 🔍 Automatyczna diagnostyka
-
-
-
-Jeżeli automatyczna próba naprawy zakończy się niepowodzeniem, n8n uruchamia dodatkowy etap diagnostyczny.
-
-
-
-Zbierane są między innymi:
-
-
-
-\- nazwa usługi,
-
-\- aktualny stan usługi,
-
-\- tryb uruchamiania,
-
-\- kod wyjścia,
-
-\- ścieżka do pliku wykonywalnego,
-
-\- informacje pomocne w dalszej diagnostyce.
-
-
-
-Przykład:
-
-
-
-```powershell
-
-$svc = Get-CimInstance Win32\_Service -Filter "Name='Zabbix Agent'"
-
-
-
-\[PSCustomObject]@{
-
-&#x20;   Name      = $svc.Name
-
-&#x20;   State     = $svc.State
-
-&#x20;   StartMode = $svc.StartMode
-
-&#x20;   ExitCode  = $svc.ExitCode
-
-&#x20;   Path      = $svc.PathName
-
-} | ConvertTo-Json -Compress
-
-```
-
-
-
-Dane są zwracane do n8n w formacie JSON.
-
-
-
-Przykład:
-
-
-
-```json
-
-{
-
-&#x20; "Name": "Zabbix Agent",
-
-&#x20; "State": "Stopped",
-
-&#x20; "StartMode": "Disabled",
-
-&#x20; "ExitCode": 0,
-
-&#x20; "Path": "C:\\\\Program Files\\\\Zabbix Agent\\\\zabbix\_agentd.exe"
-
-}
-
-```
-
-
-
-\---
-
-
-
-\## 🤖 Analiza AI – Ollama
-
-
-
-Jeżeli usługi nie uda się automatycznie przywrócić, dane diagnostyczne są przekazywane do lokalnego modelu LLM poprzez \*\*Ollama\*\*.
-
-
-
-Aktualnie wykorzystywany model:
-
-
-
-```text
-
+``` text
 gpt-oss:20b
-
 ```
 
+LLM pełni przede wszystkim rolę warstwy wspomagającej diagnostykę.
 
+Może przygotowywać:
 
-LLM pełni rolę warstwy wspomagającej diagnostykę.
+-   prawdopodobną przyczynę problemu,
+-   sugerowaną kolejność diagnostyki,
+-   przykładowe polecenia PowerShell,
+-   rekomendacje dalszych działań,
+-   ocenę konieczności ręcznej interwencji.
 
+Model nie otrzymuje bezpośredniej możliwości wykonywania dowolnych
+poleceń administracyjnych.
 
+------------------------------------------------------------------------
 
-Na podstawie danych z systemu model przygotowuje:
+## 🔐 Założenia bezpieczeństwa
 
+Automatyzacje są projektowane z rozdzieleniem logiki wykonawczej od
+warstwy analitycznej.
 
-
-\- prawdopodobną przyczynę problemu,
-
-\- sugerowaną kolejność diagnostyki,
-
-\- przykładowe polecenia PowerShell,
-
-\- propozycję dalszych działań,
-
-\- ocenę, czy wymagana jest ręczna interwencja administratora.
-
-
-
-Model \*\*nie wykonuje samodzielnie zmian w systemie\*\* – jego zadaniem jest analiza danych i przygotowanie rekomendacji.
-
-
-
-\---
-
-
-
-\## 📧 Powiadomienia
-
-
-
-Workflow obsługuje dwa podstawowe scenariusze.
-
-
-
-\### ✅ Automatyczna naprawa zakończona sukcesem
-
-
-
-Administrator otrzymuje wiadomość zawierającą m.in.:
-
-
-
-```text
-
-Zabbix Auto-Healing - SUCCESS
-
-
-
-Host: TEST01
-
-Problem: Zabbix Agent niedostępny
-
-
-
-Akcja:
-
-Start-Service "Zabbix Agent"
-
-
-
-Wynik:
-
-SUCCESS – usługa działa.
-
+``` text
+Monitoring / System
+        |
+        v
+   Dane techniczne
+        |
+        v
+       n8n
+        |
+        v
+Kontrolowana logika
+        |
+        +-------> PowerShell / SSH
+        |
+        +-------> Ollama / LLM
+                     |
+                     v
+                Rekomendacja
 ```
 
+Najważniejsze założenia:
 
+-   dane uwierzytelniające nie są przechowywane bezpośrednio w
+    publicznych skryptach,
+-   Credentials usług przechowywane są w n8n,
+-   LLM służy przede wszystkim do analizy i rekomendacji,
+-   działania administracyjne wykonywane są przez kontrolowaną logikę
+    workflow,
+-   projekty publikowane w repozytorium nie powinny zawierać haseł,
+    tokenów ani innych sekretów.
 
-\### ⚠️ Automatyczna naprawa nie powiodła się
+------------------------------------------------------------------------
 
+## 📁 Struktura katalogu
 
-
-W przypadku niepowodzenia administrator otrzymuje rozszerzone powiadomienie:
-
-
-
-```text
-
-Automatyczna naprawa nie powiodła się
-
-
-
-Host: TEST01
-
-Problem: Zabbix Agent niedostępny
-
-Wynik: FAILED
-
-
-
-Analiza AI:
-
-\- prawdopodobna przyczyna,
-
-\- od czego rozpocząć diagnostykę,
-
-\- sugerowane polecenia PowerShell,
-
-\- ocena konieczności ręcznej interwencji.
-
-```
-
-
-
-\---
-
-
-
-\## 🧪 Przetestowane scenariusze
-
-
-
-\### Scenario 1 – zatrzymana usługa
-
-
-
-```text
-
-Zabbix Agent = Stopped
-
-Startup Type = Automatic
-
-```
-
-
-
-Rezultat:
-
-
-
-```text
-
-Zabbix
-
-→ Webhook
-
-→ n8n
-
-→ PowerShell
-
-→ Start-Service
-
-→ Verification
-
-→ SUCCESS
-
-→ Email
-
-```
-
-
-
-\### Scenario 2 – usługa wyłączona
-
-
-
-```text
-
-Zabbix Agent = Stopped
-
-Startup Type = Disabled
-
-```
-
-
-
-Rezultat:
-
-
-
-```text
-
-Zabbix
-
-→ Webhook
-
-→ n8n
-
-→ próba Start-Service
-
-→ FAILED
-
-→ diagnostyka
-
-→ Ollama / LLM
-
-→ rekomendacje
-
-→ Email
-
-→ ręczna interwencja administratora
-
-```
-
-
-
-\---
-
-
-
-\## 🔐 Założenia bezpieczeństwa
-
-
-
-Automatyzacja została zaprojektowana tak, aby oddzielić automatyczne działania od rekomendacji generowanych przez AI.
-
-
-
-```text
-
-Zabbix / Windows
-
-&#x20;       ↓
-
-&#x20;  dane techniczne
-
-&#x20;       ↓
-
-&#x20;     n8n
-
-&#x20;       ↓
-
-&#x20;  kontrolowana logika
-
-&#x20;       ↓
-
-PowerShell / SSH
-
-```
-
-
-
-LLM wykorzystywany jest przede wszystkim jako warstwa analityczna.
-
-
-
-```text
-
-Diagnostyka
-
-&#x20;   ↓
-
-Ollama / LLM
-
-&#x20;   ↓
-
-Rekomendacja
-
-&#x20;   ↓
-
-Administrator
-
-```
-
-
-
-Dzięki temu model AI nie otrzymuje bezpośredniej możliwości wykonywania dowolnych poleceń administracyjnych.
-
-
-
-\---
-
-
-
-\## 📁 Planowana struktura
-
-
-
-```text
-
+``` text
 n8n/
-
-│
-
 ├── README.md
-
-│
-
 ├── zabbix-auto-remediation/
-
 │   ├── README.md
-
 │   ├── workflow.json
-
 │   └── screenshots/
-
-│
-
-├── wazuh-automation/
-
-│   └── README.md
-
-│
-
-└── windows-automation/
-
-&#x20;   └── README.md
-
+└── windows-update-automation/
+    ├── README.md
+    ├── scripts/
+    ├── workflows/
+    └── screenshots/
 ```
 
+Każdy projekt posiada własny README zawierający szczegółowy opis
+działania, architekturę oraz przykłady.
 
+------------------------------------------------------------------------
 
-\---
+## 🗺️ Plan rozwoju
 
+Kolejne planowane kierunki rozwoju Home IT Lab:
 
+-   dalsza automatyzacja diagnostyki Windows,
+-   monitoring i automatyczna obsługa problemów z miejscem na dyskach,
+-   diagnostyka wykorzystania CPU i RAM,
+-   integracja alertów Wazuh z n8n,
+-   klasyfikacja zdarzeń przez lokalny LLM,
+-   automatyczne tworzenie raportów incydentów,
+-   historia wykonanych działań Auto-Remediation,
+-   centralne raportowanie stanu aktualizacji Windows,
+-   rozwój mechanizmów eskalacji do administratora.
 
-\## 🗺️ Plan rozwoju
+------------------------------------------------------------------------
 
+## 🎯 Cel
 
+Celem laboratorium jest praktyczna nauka i testowanie:
 
-Planowane kolejne integracje:
+-   monitoringu infrastruktury,
+-   automatyzacji IT,
+-   PowerShell,
+-   SSH,
+-   REST API i webhooków,
+-   Auto-Remediation,
+-   diagnostyki systemów Windows,
+-   integracji lokalnych modeli LLM,
+-   automatyzacji reakcji na zdarzenia infrastrukturalne.
 
+Docelowy kierunek rozwoju:
 
-
-\- Zabbix → n8n → automatyczna diagnostyka Windows,
-
-\- Zabbix → n8n → analiza problemów usług Windows,
-
-\- Zabbix → n8n → monitoring miejsca na dyskach,
-
-\- Zabbix → n8n → diagnostyka wykorzystania CPU/RAM,
-
-\- Wazuh → n8n → analiza alertów bezpieczeństwa,
-
-\- n8n → Ollama → klasyfikacja zdarzeń,
-
-\- automatyczne tworzenie raportów incydentów,
-
-\- eskalacja zdarzeń wymagających interwencji administratora,
-
-\- tworzenie historii wykonanych działań Auto-Remediation.
-
-
-
-\---
-
-
-
-\## 🎯 Cel projektu
-
-
-
-Projekt służy do praktycznej nauki i testowania:
-
-
-
-\- monitoringu infrastruktury,
-
-\- automatyzacji IT,
-
-\- PowerShell,
-
-\- SSH,
-
-\- API i Webhooków,
-
-\- Auto-Remediation,
-
-\- diagnostyki systemów Windows,
-
-\- integracji lokalnych modeli LLM,
-
-\- automatyzacji reakcji na incydenty.
-
-
-
-Docelowo środowisko ma umożliwiać budowę coraz bardziej zaawansowanych mechanizmów:
-
-
-
-\*\*Detect → Analyze → Remediate → Verify → Escalate\*\*
-
+**Detect → Analyze → Remediate → Verify → Escalate**
