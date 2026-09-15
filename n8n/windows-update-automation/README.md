@@ -16,16 +16,20 @@ automatyzację procesu Windows Update.
 
 Windows Task Scheduler uruchamia skrypty PowerShell z podwyższonymi
 uprawnieniami. Skrypty komunikują się z Windows Update przez COM API, a
-następnie przesyłają wynik wykonania w formacie JSON do webhooka n8n.
-n8n analizuje otrzymany status i wysyła odpowiednie powiadomienie
-e-mail.
+następnie przesyłają wynik wykonania w formacie JSON przez HTTPS do
+mojej instancji n8n dostępnej pod adresem:
 
-Projekt składa się z dwóch głównych workflow:
+**https://n8n.tworzewski.pl**
 
--   **CHECK** --- sprawdza dostępność aktualizacji Windows i przekazuje
-    wynik do n8n.
--   **INSTALL** --- pobiera i instaluje aktualizacje, analizuje wynik
-    oraz konieczność restartu i raportuje rezultat do n8n.
+n8n odbiera raport przez webhook, analizuje otrzymane dane i wysyła
+administratorowi odpowiednie powiadomienie e-mail.
+
+Projekt składa się z dwóch głównych procesów:
+
+-   **CHECK** --- sprawdzanie dostępności aktualizacji Windows i
+    raportowanie wyniku,
+-   **INSTALL** --- pobieranie i instalowanie aktualizacji, analiza
+    wyniku, wykrywanie wymaganego restartu i raportowanie rezultatu.
 
 ## Architektura
 
@@ -40,7 +44,8 @@ Windows Task Scheduler
           |
           | HTTPS POST / JSON
           v
-      n8n Webhook
+ n8n.tworzewski.pl
+      Webhook
           |
           v
    Analiza statusu
@@ -56,61 +61,102 @@ Windows Task Scheduler
 
 1.  **Windows Task Scheduler** automatycznie uruchamia skrypt PowerShell
     z podwyższonymi uprawnieniami.
-2.  **PowerShell** sprawdza lub instaluje aktualizacje za pomocą Windows
-    Update COM API.
-3.  Skrypt przesyła wynik do **n8n** przez HTTPS Webhook w formacie
-    JSON.
-4.  **n8n** analizuje rezultat i wysyła raport e-mail. Workflow INSTALL
-    dodatkowo sprawdza, czy system wymaga restartu.
+2.  **PowerShell** komunikuje się z Windows Update COM API i wykonuje
+    operację CHECK lub INSTALL.
+3.  Wynik działania jest budowany w formacie JSON.
+4.  Raport trafia przez HTTPS POST do webhooka na **n8n.tworzewski.pl**.
+5.  **n8n** analizuje otrzymane dane i wysyła odpowiednie powiadomienie
+    e-mail.
+6.  Workflow INSTALL dodatkowo raportuje wynik instalacji oraz
+    informację o wymaganym restarcie.
 
 ------------------------------------------------------------------------
 
 ## Windows Update - CHECK
 
-Workflow **CHECK** odpowiada za monitorowanie dostępności aktualizacji
-Windows.
+Workflow **CHECK** odpowiada za automatyczne monitorowanie dostępności
+aktualizacji Windows.
 
-Skrypt PowerShell wyszukuje oczekujące aktualizacje, przygotowuje raport
-zawierający nazwę hosta, datę, liczbę aktualizacji oraz ich szczegóły, a
-następnie wysyła dane do n8n.
+Skrypt PowerShell wyszukuje oczekujące aktualizacje i przygotowuje
+raport zawierający m.in.:
 
-n8n może na tej podstawie powiadomić administratora o dostępnych
-aktualizacjach.
+-   nazwę hosta,
+-   datę wykonania,
+-   liczbę dostępnych aktualizacji,
+-   listę znalezionych aktualizacji.
+
+Raport jest następnie wysyłany do n8n przez webhook.
 
 ### Workflow n8n
 
 ![Windows Update CHECK workflow](screenshots/WindowsUpdate-CHECK.png)
 
+### Powiadomienie e-mail
+
+Po wykryciu dostępnych aktualizacji n8n wysyła administratorowi raport
+zawierający informacje o komputerze oraz dostępnych aktualizacjach.
+
+![Windows Update CHECK -
+Email](screenshots/WindowsUpdate-CHECK-Email.png)
+
 ------------------------------------------------------------------------
 
 ## Windows Update - INSTALL
 
-Workflow **INSTALL** odpowiada za właściwy proces instalacji
-aktualizacji i raportowanie jego wyniku.
+Workflow **INSTALL** odpowiada za pobieranie i instalowanie aktualizacji
+oraz raportowanie wyniku operacji.
 
 Skrypt PowerShell:
 
 -   wyszukuje dostępne aktualizacje,
 -   akceptuje wymagane EULA,
--   pobiera i instaluje aktualizacje,
--   analizuje `ResultCode` oraz `HRESULT` poszczególnych aktualizacji,
+-   pobiera aktualizacje,
+-   instaluje aktualizacje,
+-   analizuje `ResultCode` oraz `HRESULT`,
 -   sprawdza, czy wymagany jest restart,
--   przesyła końcowy raport do n8n.
+-   przygotowuje raport JSON,
+-   przesyła wynik do n8n.
 
-n8n analizuje otrzymany status i kieruje wykonanie do odpowiedniej
-ścieżki **SUCCESS** lub **FAILED**, po czym wysyła raport e-mail.
+Po odebraniu raportu n8n sprawdza status operacji i kieruje wykonanie do
+odpowiedniej ścieżki:
+
+``` text
+                +--> SUCCESS --> Send Success Report
+Webhook --> IF -|
+                +--> FAILED  --> Send Failure Report
+```
 
 ### Workflow n8n
 
 ![Windows Update INSTALL
 workflow](screenshots/WindowsUpdate-INSTALL.png)
 
+### Raport po instalacji
+
+Po zakończeniu procesu administrator otrzymuje raport zawierający status
+operacji, liczbę zainstalowanych aktualizacji oraz informację o
+wymaganym restarcie.
+
+![Windows Update INSTALL -
+Email](screenshots/WindowsUpdate-INSTALL-Email.png)
+
 ------------------------------------------------------------------------
 
-## Przykładowy raport do n8n
+## Komunikacja PowerShell z n8n
 
-PowerShell przesyła wynik do webhooka n8n metodą HTTP POST z nagłówkiem
-`Content-Type: application/json`.
+PowerShell przesyła wynik wykonania metodą **HTTP POST** do webhooka
+n8n.
+
+``` text
+PowerShell
+    |
+    | HTTPS POST
+    | Content-Type: application/json
+    v
+n8n Webhook
+```
+
+Przykładowy raport:
 
 ``` json
 {
@@ -126,12 +172,16 @@ PowerShell przesyła wynik do webhooka n8n metodą HTTP POST z nagłówkiem
 }
 ```
 
-Dzięki takiemu podziałowi **PowerShell** odpowiada za operacje
-systemowe, natomiast **n8n** za logikę workflow i raportowanie.
+Dzięki takiemu podziałowi:
+
+-   **PowerShell** odpowiada za operacje wykonywane w systemie Windows,
+-   **Windows Update COM API** odpowiada za obsługę aktualizacji,
+-   **n8n** odpowiada za logikę workflow i raportowanie,
+-   **HTTPS Webhook** łączy obie części automatyzacji.
 
 ## Automatyczne uruchamianie
 
-Skrypty mogą działać bezobsługowo dzięki **Windows Task Scheduler**.
+Skrypty działają bezobsługowo dzięki **Windows Task Scheduler**.
 
 Przykładowa akcja:
 
@@ -139,8 +189,7 @@ Przykładowa akcja:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Scripts\WindowsUpdate-Install.ps1"
 ```
 
-Zadanie odpowiedzialne za instalowanie aktualizacji powinno działać z
-opcją:
+Zadanie instalujące aktualizacje powinno działać z opcją:
 
 > **Run with highest privileges**
 
@@ -159,37 +208,39 @@ windows-update-automation/
 │   └── windows-update-install.json
 ├── screenshots/
 │   ├── WindowsUpdate-CHECK.png
-│   └── WindowsUpdate-INSTALL.png
+│   ├── WindowsUpdate-INSTALL.png
+│   ├── WindowsUpdate-CHECK-Email.png
+│   └── WindowsUpdate-INSTALL-Email.png
 └── README.md
 ```
 
--   `scripts/` --- skrypty PowerShell odpowiedzialne za Windows Update i
-    raportowanie do n8n.
--   `workflows/` --- eksporty workflow n8n dla procesów CHECK i INSTALL.
--   `screenshots/` --- zrzuty ekranu przedstawiające przygotowane
-    workflow.
+-   `scripts/` --- skrypty PowerShell odpowiedzialne za obsługę Windows
+    Update i raportowanie do n8n,
+-   `workflows/` --- eksporty workflow n8n dla procesów CHECK i INSTALL,
+-   `screenshots/` --- zrzuty workflow oraz przykładowych powiadomień
+    e-mail.
 
 ## Bezpieczeństwo
 
-Publiczna wersja projektu nie powinna zawierać sekretów ani informacji
-charakterystycznych dla rzeczywistego środowiska.
+Repozytorium nie powinno zawierać danych uwierzytelniających ani
+sekretów.
 
-Przed publikacją należy usunąć lub zastąpić:
+Przed publikacją należy zweryfikować i w razie potrzeby usunąć:
 
--   rzeczywiste adresy webhooków,
--   adresy e-mail,
--   dane uwierzytelniające i hasła,
+-   hasła,
 -   tokeny API,
+-   dane uwierzytelniające,
 -   prywatne adresy IP,
--   inne dane środowiskowe, których nie chcemy publikować.
+-   pełne adresy webhooków zawierające niepubliczne identyfikatory,
+-   inne dane, które nie powinny być publicznie dostępne.
 
-Przykładowy placeholder:
+Publiczny adres instancji n8n używanej w projekcie:
 
-``` powershell
-$WebhookUrl = "https://n8n.example.com/webhook/windows-update-install"
+``` text
+https://n8n.tworzewski.pl
 ```
 
-Dane dostępowe SMTP i innych usług powinny być przechowywane jako
+Dane dostępowe do SMTP i innych usług powinny być przechowywane jako
 **Credentials w n8n**, a nie bezpośrednio w skryptach lub definicjach
 workflow.
 
@@ -197,22 +248,26 @@ workflow.
 
 Projekt można rozbudować m.in. o:
 
--   centralną obsługę wielu komputerów Windows,
+-   obsługę wielu komputerów Windows,
 -   maintenance windows,
 -   historię wykonanych aktualizacji,
+-   centralny dashboard stanu aktualizacji,
 -   zbiorcze raportowanie,
 -   obsługę restartu z uwzględnieniem aktywnych użytkowników,
--   centralny dashboard stanu aktualizacji,
 -   integrację z Zabbix,
 -   integrację z Wazuh,
--   automatyczną analizę błędów i remediację.
+-   automatyczną analizę błędów,
+-   automatyczną remediację.
 
 ## Cel projektu
 
-Celem projektu jest praktyczne połączenie klasycznej administracji
-systemami Windows z automatyzacją:
+Projekt powstał w ramach mojego **Home IT Lab** jako praktyczne
+ćwiczenie łączące administrację systemami Windows z automatyzacją.
 
-**PowerShell + Windows Update + Task Scheduler + REST/Webhook + n8n**
+Główne technologie i mechanizmy wykorzystane w projekcie:
+
+**PowerShell + Windows Update + Task Scheduler + REST/Webhook + JSON +
+n8n**
 
 Projekt pozwala rozwijać praktyczne umiejętności związane z
 administracją Windows, automatyzacją procesów, komunikacją pomiędzy
