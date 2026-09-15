@@ -1,4 +1,4 @@
-\# 🔄 Windows Update Automation with n8n
+\# 🔄 Windows Update Automation with PowerShell \& n8n
 
 
 
@@ -6,11 +6,11 @@ Automatyzacja procesu \*\*sprawdzania, instalowania i raportowania aktualizacji 
 
 
 
-Projekt działa bezobsługowo — Harmonogram zadań uruchamia skrypt PowerShell, który komunikuje się z Windows Update, a wynik operacji przesyłany jest przez webhook do n8n.
+Projekt działa automatycznie — \*\*Windows Task Scheduler\*\* uruchamia skrypt PowerShell, który komunikuje się z Windows Update, a wynik operacji przesyłany jest przez \*\*HTTPS Webhook\*\* do n8n.
 
 
 
-n8n analizuje wynik i wysyła administratorowi odpowiednie powiadomienie e-mail.
+n8n analizuje otrzymany raport i wysyła administratorowi odpowiednie powiadomienie e-mail.
 
 
 
@@ -22,7 +22,37 @@ n8n analizuje wynik i wysyła administratorowi odpowiednie powiadomienie e-mail.
 
 
 
-`PowerShell` • `Windows Update API` • `Task Scheduler` • `n8n` • `REST API` • `Webhook` • `JSON` • `SMTP`
+!\[PowerShell](https://img.shields.io/badge/PowerShell-Automation-blue)
+
+!\[Windows](https://img.shields.io/badge/Windows-11-blue)
+
+!\[n8n](https://img.shields.io/badge/n8n-Workflow\_Automation-orange)
+
+!\[REST API](https://img.shields.io/badge/REST-API-green)
+
+!\[JSON](https://img.shields.io/badge/Data-JSON-yellow)
+
+
+
+\*\*Wykorzystane technologie:\*\*
+
+
+
+\- PowerShell
+
+\- Windows Update Agent COM API
+
+\- Windows Task Scheduler
+
+\- n8n
+
+\- REST API
+
+\- HTTPS Webhook
+
+\- JSON
+
+\- SMTP / Email
 
 
 
@@ -36,71 +66,75 @@ n8n analizuje wynik i wysyła administratorowi odpowiednie powiadomienie e-mail.
 
 ```text
 
-┌──────────────────────────┐
+┌───────────────────────────┐
 
-│  Windows Task Scheduler  │
+│  Windows Task Scheduler   │
 
-└────────────┬─────────────┘
+└─────────────┬─────────────┘
 
-&#x20;            │
+&#x20;             │
 
-&#x20;            ▼
+&#x20;             ▼
 
-┌──────────────────────────┐
+┌───────────────────────────┐
 
-│        PowerShell        │
+│        PowerShell         │
 
-│                          │
+│                           │
 
-│  CHECK / INSTALL         │
+│      CHECK / INSTALL      │
 
-└────────────┬─────────────┘
+└─────────────┬─────────────┘
 
-&#x20;            │
+&#x20;             │
 
-&#x20;            ▼
+&#x20;             ▼
 
-┌──────────────────────────┐
+┌───────────────────────────┐
 
-│   Windows Update API     │
+│  Windows Update COM API   │
 
-└────────────┬─────────────┘
+└─────────────┬─────────────┘
 
-&#x20;            │
+&#x20;             │
 
-&#x20;            │ HTTPS POST / JSON
+&#x20;             │ HTTPS POST / JSON
 
-&#x20;            ▼
+&#x20;             ▼
 
-┌──────────────────────────┐
+┌───────────────────────────┐
 
-│       n8n Webhook        │
+│        n8n Webhook        │
 
-└────────────┬─────────────┘
+└─────────────┬─────────────┘
 
-&#x20;            │
+&#x20;             │
 
-&#x20;            ▼
+&#x20;             ▼
 
-&#x20;       ┌─────────┐
+&#x20;      ┌─────────────┐
 
-&#x20;       │   IF    │
+&#x20;      │     IF      │
 
-&#x20;       └────┬────┘
+&#x20;      └──────┬──────┘
 
-&#x20;         ┌──┴──┐
+&#x20;         ┌───┴───┐
 
-&#x20;         ▼     ▼
+&#x20;         │       │
 
-&#x20;     SUCCESS  FAILED
+&#x20;         ▼       ▼
 
-&#x20;         │     │
+&#x20;     SUCCESS   FAILED
 
-&#x20;         └──┬──┘
+&#x20;         │       │
 
-&#x20;            ▼
+&#x20;         └───┬───┘
 
-&#x20;     📧 Email Report
+&#x20;             │
+
+&#x20;             ▼
+
+&#x20;    Email notification
 
 ```
 
@@ -110,31 +144,35 @@ n8n analizuje wynik i wysyła administratorowi odpowiednie powiadomienie e-mail.
 
 
 
-\# 🔍 Windows Update - CHECK
+\## 🔍 Windows Update - CHECK
 
 
 
-Workflow odpowiada za sprawdzanie, czy na komputerze dostępne są nowe aktualizacje Windows.
+Workflow \*\*CHECK\*\* odpowiada za automatyczne sprawdzanie dostępności nowych aktualizacji Windows.
 
 
 
-PowerShell:
+Skrypt PowerShell:
 
 
 
-\- łączy się z Windows Update API,
+1\. łączy się z Windows Update,
 
-\- wyszukuje dostępne aktualizacje,
+2\. wyszukuje dostępne aktualizacje,
 
-\- tworzy raport JSON,
+3\. pobiera informacje o znalezionych aktualizacjach,
 
-\- przesyła wynik do webhooka n8n,
+4\. tworzy raport w formacie JSON,
 
-\- n8n wysyła powiadomienie, jeżeli aktualizacje są dostępne.
+5\. przesyła raport przez HTTP POST do webhooka n8n,
+
+6\. n8n analizuje liczbę dostępnych aktualizacji,
+
+7\. w razie potrzeby wysyła administratorowi powiadomienie.
 
 
 
-\### Workflow n8n
+\### Workflow n8n - CHECK
 
 
 
@@ -146,41 +184,57 @@ PowerShell:
 
 
 
-\# ⚙️ Windows Update - INSTALL
+\## ⚙️ Windows Update - INSTALL
 
 
 
-Workflow odpowiada za automatyczną instalację aktualizacji.
+Workflow \*\*INSTALL\*\* odpowiada za automatyczne pobieranie i instalowanie aktualizacji Windows.
 
 
 
-Proces:
+Skrypt PowerShell:
 
 
 
-1\. PowerShell wyszukuje aktualizacje.
+1\. wyszukuje dostępne aktualizacje,
 
-2\. Akceptuje wymagane EULA.
+2\. akceptuje wymagane EULA,
 
-3\. Pobiera aktualizacje.
+3\. tworzy kolekcję aktualizacji do instalacji,
 
-4\. Instaluje je przez Windows Update API.
+4\. pobiera aktualizacje,
 
-5\. Analizuje `ResultCode` oraz `HRESULT`.
+5\. rozpoczyna instalację,
 
-6\. Sprawdza, czy wymagany jest restart.
+6\. analizuje wynik instalacji,
 
-7\. Wysyła raport JSON do n8n.
+7\. zapisuje `ResultCode` oraz `HRESULT`,
 
-8\. n8n rozdziela wynik na `SUCCESS` lub `FAILED`.
+8\. sprawdza, czy wymagany jest restart,
 
-9\. Administrator otrzymuje raport e-mail.
+9\. tworzy raport JSON,
 
-10\. Jeżeli wymagany jest restart, system może zostać automatycznie uruchomiony ponownie.
+10\. wysyła wynik do n8n przez webhook.
 
 
 
-\### Workflow n8n
+n8n analizuje status otrzymany ze skryptu i kieruje wykonanie do odpowiedniej gałęzi:
+
+
+
+```text
+
+&#x20;                 ┌── SUCCESS ──► Success Email
+
+Webhook ──► IF ───┤
+
+&#x20;                 └── FAILED ───► Failure Email
+
+```
+
+
+
+\### Workflow n8n - INSTALL
 
 
 
@@ -192,11 +246,35 @@ Proces:
 
 
 
-\## 🔗 Komunikacja PowerShell → n8n
+\## 🔗 PowerShell → n8n
 
 
 
-PowerShell przesyła wynik wykonania przez \*\*HTTP POST\*\* do webhooka n8n.
+Komunikacja pomiędzy PowerShell a n8n realizowana jest za pomocą \*\*HTTPS Webhook\*\*.
+
+
+
+Po wykonaniu operacji skrypt PowerShell wysyła metodą:
+
+
+
+```text
+
+HTTP POST
+
+```
+
+
+
+raport w formacie:
+
+
+
+```text
+
+Content-Type: application/json
+
+```
 
 
 
@@ -208,7 +286,7 @@ Przykładowy payload:
 
 {
 
-&#x20; "host": "W11-TEST1",
+&#x20; "host": "WINDOWS-CLIENT",
 
 &#x20; "date": "2026-09-15 09:35:08",
 
@@ -220,7 +298,11 @@ Przykładowy payload:
 
 &#x20; "resultCode": 2,
 
-&#x20; "rebootRequired": true
+&#x20; "rebootRequired": true,
+
+&#x20; "error": "",
+
+&#x20; "updates": \[]
 
 }
 
@@ -228,7 +310,17 @@ Przykładowy payload:
 
 
 
-Dzięki temu PowerShell odpowiada za operacje systemowe, natomiast n8n pełni rolę warstwy automatyzacji i raportowania.
+Dzięki takiemu podziałowi:
+
+
+
+\- \*\*PowerShell\*\* odpowiada za operacje wykonywane bezpośrednio w systemie Windows,
+
+\- \*\*Windows Update API\*\* odpowiada za wyszukiwanie, pobieranie i instalowanie aktualizacji,
+
+\- \*\*n8n\*\* odpowiada za logikę workflow oraz raportowanie,
+
+\- \*\*Webhook\*\* zapewnia komunikację pomiędzy hostem Windows a n8n.
 
 
 
@@ -236,15 +328,63 @@ Dzięki temu PowerShell odpowiada za operacje systemowe, natomiast n8n pełni ro
 
 
 
-\## ⏱️ Automatyczne uruchamianie
+\## 🔁 Obsługa restartu
 
 
 
-Skrypt uruchamiany jest przez \*\*Windows Task Scheduler\*\*.
+Po zakończeniu instalacji skrypt sprawdza, czy Windows wymaga ponownego uruchomienia.
 
 
 
-Przykładowa akcja:
+Sprawdzany jest m.in. wynik zwracany przez Windows Update:
+
+
+
+```powershell
+
+$InstallResult.RebootRequired
+
+```
+
+
+
+Skrypt może również wykrywać dodatkowe oznaki oczekującego restartu systemu.
+
+
+
+Jeżeli restart jest wymagany, informacja:
+
+
+
+```json
+
+"rebootRequired": true
+
+```
+
+
+
+zostaje przekazana do n8n w raporcie.
+
+
+
+W zależności od konfiguracji skrypt może następnie wykonać automatyczny restart systemu.
+
+
+
+\---
+
+
+
+\## ⏱️ Windows Task Scheduler
+
+
+
+Skrypty są uruchamiane automatycznie przez \*\*Windows Task Scheduler\*\*, dzięki czemu proces nie wymaga ręcznego uruchamiania PowerShell.
+
+
+
+Przykładowa akcja zadania:
 
 
 
@@ -256,7 +396,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Scripts\\WindowsUpd
 
 
 
-Zadanie uruchamiane jest z opcją:
+Zadanie instalujące aktualizacje powinno być uruchamiane z opcją:
 
 
 
@@ -264,7 +404,63 @@ Zadanie uruchamiane jest z opcją:
 
 
 
-Jest to wymagane, ponieważ instalacja aktualizacji Windows wymaga podwyższonych uprawnień.
+Podwyższone uprawnienia są wymagane do wykonywania operacji związanych z instalacją aktualizacji Windows.
+
+
+
+\---
+
+
+
+\## 📧 Raportowanie
+
+
+
+Po zakończeniu procesu n8n otrzymuje raport przesłany przez PowerShell.
+
+
+
+Workflow rozpoznaje wynik wykonania i może wysłać administratorowi:
+
+
+
+\*\*SUCCESS\*\*
+
+
+
+```text
+
+Windows Update installation completed successfully.
+
+Installed updates: 2
+
+Reboot required: True
+
+```
+
+
+
+lub:
+
+
+
+\*\*FAILED\*\*
+
+
+
+```text
+
+Windows Update installation failed.
+
+ResultCode: 4
+
+HRESULT: 0xXXXXXXXX
+
+```
+
+
+
+Pozwala to monitorować wynik aktualizacji bez konieczności logowania się bezpośrednio do komputera.
 
 
 
@@ -312,6 +508,30 @@ windows-update-automation/
 
 
 
+\### `scripts/`
+
+
+
+Skrypty PowerShell odpowiedzialne za obsługę Windows Update i komunikację z n8n.
+
+
+
+\### `workflows/`
+
+
+
+Eksporty workflow n8n umożliwiające odtworzenie automatyzacji na innej instancji n8n.
+
+
+
+\### `screenshots/`
+
+
+
+Zrzuty ekranu przedstawiające przygotowane workflow.
+
+
+
 \---
 
 
@@ -320,23 +540,31 @@ windows-update-automation/
 
 
 
-Publiczna wersja projektu nie zawiera:
+Publiczna wersja projektu nie powinna zawierać informacji związanych z rzeczywistym środowiskiem produkcyjnym lub laboratoryjnym.
 
 
 
-\- danych uwierzytelniających,
-
-\- haseł,
-
-\- tokenów API,
-
-\- prywatnych adresów webhooków,
-
-\- danych SMTP.
+Przed publikacją należy usunąć lub zastąpić:
 
 
 
-Adres webhooka powinien zostać dostosowany do własnego środowiska:
+\- rzeczywiste adresy webhooków,
+
+\- dane uwierzytelniające,
+
+\- hasła,
+
+\- tokeny API,
+
+\- adresy e-mail,
+
+\- prywatne adresy IP,
+
+\- inne sekrety.
+
+
+
+Przykładowy adres webhooka:
 
 
 
@@ -348,35 +576,45 @@ $WebhookUrl = "https://n8n.example.com/webhook/windows-update-install"
 
 
 
+Dane dostępowe do SMTP oraz innych usług powinny być przechowywane jako \*\*Credentials w n8n\*\*, a nie bezpośrednio w workflow lub skryptach.
+
+
+
 \---
 
 
 
-\## 🚀 Dalszy rozwój
+\## 🚀 Możliwy dalszy rozwój
 
 
 
-Projekt można rozbudować o:
+Projekt można rozszerzyć o:
 
 
 
-\- obsługę wielu komputerów,
+\- obsługę wielu komputerów Windows,
 
-\- centralny dashboard aktualizacji,
+\- centralny dashboard stanu aktualizacji,
 
-\- historię instalacji,
+\- historię wykonanych instalacji,
 
 \- maintenance windows,
+
+\- opóźnianie restartu dla aktywnych użytkowników,
+
+\- raport zbiorczy dla administratora,
 
 \- integrację z Zabbix,
 
 \- integrację z Wazuh,
 
-\- automatyczną analizę błędów,
+\- automatyczną analizę błędów Windows Update,
 
 \- automatyczną remediację,
 
-\- zbiorczy raport stanu aktualizacji infrastruktury.
+\- przechowywanie wyników w bazie danych,
+
+\- monitoring komputerów wymagających restartu.
 
 
 
@@ -388,9 +626,17 @@ Projekt można rozbudować o:
 
 
 
-Projekt jest częścią mojego \*\*Home IT Lab\*\* i służy do praktycznej nauki automatyzacji administracji systemami Windows.
+Projekt jest częścią mojego \*\*Home IT Lab\*\* i został przygotowany w celu praktycznej nauki automatyzacji administracji systemami Windows.
 
 
 
-Głównym celem było połączenie klasycznej administracji Windows z nowoczesnym podejściem opartym o \*\*PowerShell, API, webhooki i n8n\*\*.
+Głównym założeniem było połączenie klasycznej administracji Windows z narzędziami automatyzacji:
+
+
+
+\*\*PowerShell + Windows Update + Task Scheduler + REST/Webhook + n8n\*\*
+
+
+
+Projekt pozwala przećwiczyć nie tylko administrację Windows, ale również komunikację pomiędzy systemami, automatyzację procesów oraz monitoring wyniku wykonywanych operacji.
 
