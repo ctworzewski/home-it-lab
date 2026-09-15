@@ -1,7 +1,7 @@
-# Windows Update Automation with PowerShell & n8n
+# Windows Update Automation z PowerShell i n8n
 
-> Automated Windows Update checking, installation, reboot detection, and
-> reporting using PowerShell, Windows Task Scheduler, and n8n.
+> Automatyczne sprawdzanie, instalowanie i raportowanie aktualizacji
+> Windows z wykorzystaniem PowerShell, Windows Task Scheduler oraz n8n.
 
 ![PowerShell](https://img.shields.io/badge/PowerShell-Automation-5391FE)
 ![Windows](https://img.shields.io/badge/Windows-11-0078D4)
@@ -9,24 +9,25 @@
 ![REST API](https://img.shields.io/badge/REST-API-009688)
 ![JSON](https://img.shields.io/badge/Data-JSON-555555)
 
-## Overview
+## O projekcie
 
-This project is part of my **Home IT Lab** and demonstrates an
-end-to-end Windows Update automation workflow.
+Projekt jest częścią mojego **Home IT Lab** i przedstawia kompletną
+automatyzację procesu Windows Update.
 
-Windows Task Scheduler runs PowerShell scripts with elevated privileges.
-The scripts interact with the Windows Update COM API and send execution
-results as JSON to an n8n webhook. n8n evaluates the result and sends
-the appropriate email notification.
+Windows Task Scheduler uruchamia skrypty PowerShell z podwyższonymi
+uprawnieniami. Skrypty komunikują się z Windows Update przez COM API, a
+następnie przesyłają wynik wykonania w formacie JSON do webhooka n8n.
+n8n analizuje otrzymany status i wysyła odpowiednie powiadomienie
+e-mail.
 
-The project contains two workflows:
+Projekt składa się z dwóch głównych workflow:
 
--   **CHECK** --- detects available Windows updates and reports them to
-    n8n.
--   **INSTALL** --- downloads and installs updates, checks the result
-    and reboot requirement, then reports the outcome to n8n.
+-   **CHECK** --- sprawdza dostępność aktualizacji Windows i przekazuje
+    wynik do n8n.
+-   **INSTALL** --- pobiera i instaluje aktualizacje, analizuje wynik
+    oraz konieczność restartu i raportuje rezultat do n8n.
 
-## Architecture
+## Architektura
 
 ``` text
 Windows Task Scheduler
@@ -42,39 +43,41 @@ Windows Task Scheduler
       n8n Webhook
           |
           v
-     Status check
+   Analiza statusu
        /     \
       /       \
  SUCCESS     FAILED
       \       /
        \     /
-    Email report
+    Raport e-mail
 ```
 
-## How it works
+## Jak to działa?
 
-1.  **Windows Task Scheduler** starts the PowerShell script
-    automatically with elevated privileges.
-2.  **PowerShell** checks or installs updates through the Windows Update
-    COM API.
-3.  The script sends the execution result to **n8n** using an HTTPS
-    webhook and JSON payload.
-4.  **n8n** evaluates the result and sends an email report. The INSTALL
-    workflow also detects whether Windows requires a reboot.
+1.  **Windows Task Scheduler** automatycznie uruchamia skrypt PowerShell
+    z podwyższonymi uprawnieniami.
+2.  **PowerShell** sprawdza lub instaluje aktualizacje za pomocą Windows
+    Update COM API.
+3.  Skrypt przesyła wynik do **n8n** przez HTTPS Webhook w formacie
+    JSON.
+4.  **n8n** analizuje rezultat i wysyła raport e-mail. Workflow INSTALL
+    dodatkowo sprawdza, czy system wymaga restartu.
 
 ------------------------------------------------------------------------
 
 ## Windows Update - CHECK
 
-The CHECK workflow is responsible for monitoring available Windows
-updates.
+Workflow **CHECK** odpowiada za monitorowanie dostępności aktualizacji
+Windows.
 
-The PowerShell script searches for pending updates, builds a JSON report
-containing the host, date, update count and update details, and sends it
-to n8n. The workflow can then notify the administrator when updates are
-available.
+Skrypt PowerShell wyszukuje oczekujące aktualizacje, przygotowuje raport
+zawierający nazwę hosta, datę, liczbę aktualizacji oraz ich szczegóły, a
+następnie wysyła dane do n8n.
 
-### n8n workflow
+n8n może na tej podstawie powiadomić administratora o dostępnych
+aktualizacjach.
+
+### Workflow n8n
 
 ![Windows Update CHECK workflow](screenshots/WindowsUpdate-CHECK.png)
 
@@ -82,30 +85,31 @@ available.
 
 ## Windows Update - INSTALL
 
-The INSTALL workflow performs the update process and reports its result.
+Workflow **INSTALL** odpowiada za właściwy proces instalacji
+aktualizacji i raportowanie jego wyniku.
 
-The PowerShell script:
+Skrypt PowerShell:
 
--   searches for available updates,
--   accepts required EULAs,
--   downloads and installs updates,
--   evaluates `ResultCode` and per-update `HRESULT`,
--   detects whether a reboot is required,
--   sends the final result to n8n.
+-   wyszukuje dostępne aktualizacje,
+-   akceptuje wymagane EULA,
+-   pobiera i instaluje aktualizacje,
+-   analizuje `ResultCode` oraz `HRESULT` poszczególnych aktualizacji,
+-   sprawdza, czy wymagany jest restart,
+-   przesyła końcowy raport do n8n.
 
-n8n routes the report to the appropriate **SUCCESS** or **FAILED** email
-path.
+n8n analizuje otrzymany status i kieruje wykonanie do odpowiedniej
+ścieżki **SUCCESS** lub **FAILED**, po czym wysyła raport e-mail.
 
-### n8n workflow
+### Workflow n8n
 
 ![Windows Update INSTALL
 workflow](screenshots/WindowsUpdate-INSTALL.png)
 
 ------------------------------------------------------------------------
 
-## Example webhook payload
+## Przykładowy raport do n8n
 
-PowerShell sends the result to n8n as an HTTP POST request with
+PowerShell przesyła wynik do webhooka n8n metodą HTTP POST z nagłówkiem
 `Content-Type: application/json`.
 
 ``` json
@@ -122,27 +126,28 @@ PowerShell sends the result to n8n as an HTTP POST request with
 }
 ```
 
-This separation keeps system-level operations in PowerShell while n8n
-handles workflow logic and notifications.
+Dzięki takiemu podziałowi **PowerShell** odpowiada za operacje
+systemowe, natomiast **n8n** za logikę workflow i raportowanie.
 
-## Scheduled execution
+## Automatyczne uruchamianie
 
-The scripts can run unattended through **Windows Task Scheduler**.
+Skrypty mogą działać bezobsługowo dzięki **Windows Task Scheduler**.
 
-Example action:
+Przykładowa akcja:
 
 ``` powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Scripts\WindowsUpdate-Install.ps1"
 ```
 
-The installation task must run with:
+Zadanie odpowiedzialne za instalowanie aktualizacji powinno działać z
+opcją:
 
 > **Run with highest privileges**
 
-Elevated privileges are required for Windows Update installation
-operations.
+Podwyższone uprawnienia są wymagane do wykonywania operacji związanych z
+instalacją aktualizacji Windows.
 
-## Repository structure
+## Struktura projektu
 
 ``` text
 windows-update-automation/
@@ -158,54 +163,57 @@ windows-update-automation/
 └── README.md
 ```
 
--   `scripts/` --- PowerShell scripts for Windows Update operations and
-    n8n reporting.
--   `workflows/` --- exported n8n workflows for CHECK and INSTALL.
--   `screenshots/` --- workflow screenshots used in this documentation.
+-   `scripts/` --- skrypty PowerShell odpowiedzialne za Windows Update i
+    raportowanie do n8n.
+-   `workflows/` --- eksporty workflow n8n dla procesów CHECK i INSTALL.
+-   `screenshots/` --- zrzuty ekranu przedstawiające przygotowane
+    workflow.
 
-## Security
+## Bezpieczeństwo
 
-The public version of this project should not contain
-environment-specific secrets or credentials.
+Publiczna wersja projektu nie powinna zawierać sekretów ani informacji
+charakterystycznych dla rzeczywistego środowiska.
 
-Before publishing, replace or remove:
+Przed publikacją należy usunąć lub zastąpić:
 
--   real webhook URLs,
--   email addresses,
--   credentials and passwords,
--   API tokens,
--   private IP addresses,
--   other environment-specific secrets.
+-   rzeczywiste adresy webhooków,
+-   adresy e-mail,
+-   dane uwierzytelniające i hasła,
+-   tokeny API,
+-   prywatne adresy IP,
+-   inne dane środowiskowe, których nie chcemy publikować.
 
-Example placeholder:
+Przykładowy placeholder:
 
 ``` powershell
 $WebhookUrl = "https://n8n.example.com/webhook/windows-update-install"
 ```
 
-SMTP and other service credentials should be stored in **n8n
-Credentials**, not directly in scripts or workflow definitions.
+Dane dostępowe SMTP i innych usług powinny być przechowywane jako
+**Credentials w n8n**, a nie bezpośrednio w skryptach lub definicjach
+workflow.
 
-## Future improvements
+## Dalszy rozwój
 
-Possible next steps:
+Projekt można rozbudować m.in. o:
 
--   multi-host Windows update management,
+-   centralną obsługę wielu komputerów Windows,
 -   maintenance windows,
--   update history and centralized reporting,
--   active-user-aware reboot handling,
--   centralized update status dashboard,
--   Zabbix integration,
--   Wazuh integration,
--   automatic error analysis and remediation.
+-   historię wykonanych aktualizacji,
+-   zbiorcze raportowanie,
+-   obsługę restartu z uwzględnieniem aktywnych użytkowników,
+-   centralny dashboard stanu aktualizacji,
+-   integrację z Zabbix,
+-   integrację z Wazuh,
+-   automatyczną analizę błędów i remediację.
 
-## Project goal
+## Cel projektu
 
-The goal of this Home IT Lab project is to combine traditional Windows
-administration with practical automation:
+Celem projektu jest praktyczne połączenie klasycznej administracji
+systemami Windows z automatyzacją:
 
-**PowerShell + Windows Update + Task Scheduler + REST/Webhooks + n8n**
+**PowerShell + Windows Update + Task Scheduler + REST/Webhook + n8n**
 
-It provides hands-on practice with Windows administration, API-style
-communication between systems, workflow automation, error handling, and
-operational reporting.
+Projekt pozwala rozwijać praktyczne umiejętności związane z
+administracją Windows, automatyzacją procesów, komunikacją pomiędzy
+systemami, obsługą błędów oraz raportowaniem stanu infrastruktury.
