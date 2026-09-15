@@ -1,0 +1,116 @@
+{
+  "name": "Windows Update - CHECK",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "=windows-update",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -64,
+        0
+      ],
+      "id": "db009a1b-cbf1-4ecd-bbd6-9606dee9543a",
+      "name": "Windows Update - Webhook",
+      "webhookId": "c0966e51-eae6-4dfc-acfd-6bdc3ec5c570"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "eb7434db-491a-44df-b731-2c357c0a87d6",
+              "leftValue": "={{ $json.body.updatesCount }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        224,
+        0
+      ],
+      "id": "3fa7c447-cbf0-4644-86ac-5e040eac7422",
+      "name": "Czy są aktualizacje?"
+    },
+    {
+      "parameters": {
+        "fromEmail": "cezary.it.testy@gmail.com",
+        "toEmail": "cezary.it.testy@gmail.com",
+        "subject": "=[{{$json.body.host}}] Dostępne aktualizacje Windows",
+        "html": "=<h2>Windows Update - dostępne aktualizacje</h2>\n\n<p>\n<b>Komputer:</b> {{$json.body.host}}<br>\n<b>Data sprawdzenia:</b> {{$json.body.date}}<br>\n<b>Liczba aktualizacji:</b> {{$json.body.updatesCount}}\n</p>\n\n<h3>Dostępne aktualizacje:</h3>\n\n<p>\n{{$json.body.updates.join('<br>')}}\n</p>\n\n<hr>\n\n<p>\nAktualizacje nie zostały automatycznie zainstalowane.\n</p>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        512,
+        -112
+      ],
+      "id": "22debca9-7bb7-44a8-82cb-7f154b348937",
+      "name": "Powiadom o aktualizacjach",
+      "webhookId": "10d87a3e-2856-471d-b234-c1c7733bcb87",
+      "credentials": {
+        "smtp": {
+          "id": "MjIGyoc4dIRR74Dv",
+          "name": "SMTP account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Windows Update - Webhook": {
+      "main": [
+        [
+          {
+            "node": "Czy są aktualizacje?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Czy są aktualizacje?": {
+      "main": [
+        [
+          {
+            "node": "Powiadom o aktualizacjach",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "15e569b2-9db7-44f1-a03f-ad0fe575b595",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "c1affdb29f531edec726a57e9934c22dac2ad5547612a989204b93ec96d1567f"
+  },
+  "nodeGroups": [],
+  "id": "lTvDwqlneXDvnDsK",
+  "tags": []
+}

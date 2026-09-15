@@ -1,0 +1,148 @@
+{
+  "name": "Windows Update - INSTALL",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "windows-update-install",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -336,
+        -112
+      ],
+      "id": "5e540d07-ae90-451d-b100-947130137822",
+      "name": "Windows Update Install Report",
+      "webhookId": "b09a3868-db02-44f6-91ae-74b81e23356e"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "49edb4ca-3442-4cdd-96ac-4e8d2f860b05",
+              "leftValue": "={{ $json.body.status }}",
+              "rightValue": "SUCCESS",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        48,
+        -112
+      ],
+      "id": "d1baa7f5-fee7-4cf9-9b94-0a6fd31cf7d5",
+      "name": "Installation Successful?"
+    },
+    {
+      "parameters": {
+        "fromEmail": "cezary.it.testy@gmail.com",
+        "toEmail": "cezary.it.testy@gmail.com",
+        "subject": "=[{{$json.body.host}}] Windows Update - instalacja zakończona",
+        "html": "=<h2>Windows Update - instalacja zakończona</h2>\n\n<p>\n<b>Komputer:</b> {{$json.body.host}}<br>\n<b>Data:</b> {{$json.body.date}}<br>\n<b>Status:</b> {{$json.body.status}}<br>\n<b>Zainstalowanych aktualizacji:</b> {{$json.body.installed}}<br>\n<b>Wymagany restart:</b> {{$json.body.rebootRequired}}\n</p>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        400,
+        -208
+      ],
+      "id": "fdefdfc5-d65b-47c1-a0a8-278215a504fe",
+      "name": "Send Success Report",
+      "webhookId": "6aefa531-9799-4911-903a-fec12c3f6664",
+      "credentials": {
+        "smtp": {
+          "id": "MjIGyoc4dIRR74Dv",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "cezary.it.testy@gmail.com",
+        "toEmail": "cezary.it.testy@gmail.com",
+        "subject": "=[{{$json.body.host}}] Windows Update - BŁĄD instalacji",
+        "html": "<h2>🔴 Windows Update - instalacja nieudana</h2>\n\n<p>\n<b>Komputer:</b> {{$json.body.host}}<br>\n<b>Data:</b> {{$json.body.date}}<br>\n<b>Status:</b> {{$json.body.status}}<br>\n<b>Próbowano zainstalować:</b> {{$json.body.installed}} aktualizacji<br>\n<b>Restart wymagany:</b> {{$json.body.rebootRequired}}\n</p>\n\n<p>\n<b>Błąd:</b><br>\n{{$json.body.error}}\n</p>\n\n<hr>\n\n<p>Sprawdź Windows Update na komputerze oraz logi instalacji.</p>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        416,
+        16
+      ],
+      "id": "a16bd479-8e40-478c-96bb-7ea6110c5fec",
+      "name": "Send Failure Report",
+      "webhookId": "954c065c-a5b9-46fd-8e8d-568779261a7e",
+      "credentials": {
+        "smtp": {
+          "id": "MjIGyoc4dIRR74Dv",
+          "name": "SMTP account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Windows Update Install Report": {
+      "main": [
+        [
+          {
+            "node": "Installation Successful?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Installation Successful?": {
+      "main": [
+        [
+          {
+            "node": "Send Success Report",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Failure Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "3dbd670e-fd7e-411d-9e70-99b2ea625acd",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "c1affdb29f531edec726a57e9934c22dac2ad5547612a989204b93ec96d1567f"
+  },
+  "nodeGroups": [],
+  "id": "In2TYkx08I1wbqAs",
+  "tags": []
+}
