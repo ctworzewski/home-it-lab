@@ -151,6 +151,22 @@ Dzięki temu możliwe jest prześledzenie całej ścieżki od wygenerowania zdar
 
 ---
 
+## Potwierdzenie działania agentów
+
+Poniższy zrzut przedstawia aktywne agenty Wazuh wykorzystywane w środowisku laboratoryjnym.
+
+![Aktywne agenty Wazuh](../screenshots/agents/wazuh-agents-lab.png)
+
+W momencie wykonywania testu aktywne były:
+
+- `LAB-DC1`
+- `LAB-W11-1`
+- `LAB-W11-2`
+
+Wszystkie trzy hosty poprawnie komunikowały się z serwerem Wazuh Manager.
+
+---
+
 ## Planowane scenariusze
 
 W środowisku będą realizowane między innymi następujące testy:
