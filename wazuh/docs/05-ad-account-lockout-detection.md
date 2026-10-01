@@ -51,7 +51,7 @@ LockoutObservationWindow
 
 Wynik potwierdził wartości `2 / 10 min / 10 min`.
 
-![Account Lockout Policy - GPO i PowerShell](screenshots/01-account-lockout-policy-gpo-powershell.png)
+![Account Lockout Policy - GPO i PowerShell](../screenshots/01-account-lockout-policy-gpo-powershell.png)
 
 ---
 
@@ -61,7 +61,7 @@ Na stacji `LAB-W11-1` wykonano dwie celowo nieudane próby logowania do konta do
 
 Po przekroczeniu ustawionego progu Active Directory automatycznie zablokowało konto.
 
-![Zablokowane konto na LAB-W11-1](screenshots/02-account-locked-lab-w11-1.png)
+![Zablokowane konto na LAB-W11-1](../screenshots/02-account-locked-lab-w11-1.png)
 
 ---
 
@@ -76,7 +76,7 @@ Na `LAB-DC1` w dzienniku `Windows Logs -> Security` pojawiło się zdarzenie:
 
 Pole `Caller Computer Name` pozwala ustalić komputer, z którego pochodziła próba prowadząca do blokady konta.
 
-![Event ID 4740 na LAB-DC1](screenshots/03-event-4740-domain-controller.png)
+![Event ID 4740 na LAB-DC1](../screenshots/03-event-4740-domain-controller.png)
 
 ---
 
@@ -91,11 +91,11 @@ Wazuh odebrał zdarzenie z agenta `LAB-DC1` i wykorzystał istniejącą regułę
 
 Nie ma potrzeby tworzenia własnej reguły tylko do podstawowego wykrywania 4740 — domyślna reguła Wazuh poprawnie obsługuje to zdarzenie.
 
-![Wazuh - Rule ID 60115](screenshots/04-wazuh-rule-60115.png)
+![Wazuh - Rule ID 60115](../screenshots/04-wazuh-rule-60115.png)
 
 W szczegółach alertu Wazuh widoczne są dane pochodzące bezpośrednio ze zdarzenia Windows, m.in. konto `jkowalski`, `Event ID 4740` oraz `Caller Computer Name: LAB-W11-1`.
 
-![Wazuh - szczegóły Event ID 4740](screenshots/05-wazuh-event-4740-details.png)
+![Wazuh - szczegóły Event ID 4740](../screenshots/05-wazuh-event-4740-details.png)
 
 ---
 
