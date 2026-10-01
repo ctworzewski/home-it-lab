@@ -152,10 +152,8 @@ E-mail do administratora
 
 ## Weryfikacja zgodności z CIS Benchmark
 
-Wazuh Security Configuration Assessment (SCA) sprawdza konfigurację systemu również pod kątem zaleceń CIS Benchmark. Dla `Account lockout threshold` kontrola wymaga ustawienia wartości **5 lub mniej prób, ale nie 0**.
+Wazuh Security Configuration Assessment (SCA) weryfikuje ustawienie `Account lockout threshold` zgodnie z CIS Benchmark. Ustawienie wartości `2` otrzymało status **passed**, natomiast po zmianie na `0` kontrola została oznaczona jako **failed**, ponieważ blokada kont została wyłączona.
 
-Po zmianie polityki domenowej z `0` na `2` nieudane próby logowania kontrola SCA otrzymała status **passed**.
-
-![CIS Account Lockout Threshold - Passed](../screenshots/06-cis-account-lockout-threshold-passed.png)
+![CIS Account Lockout Threshold - Passed vs Failed](../screenshots/06-cis-account-lockout-threshold-comparison.png)
 Źródło: [CIS Password Policy Guide](https://www.cisecurity.org/insights/white-papers/cis-password-policy-guide)
 
