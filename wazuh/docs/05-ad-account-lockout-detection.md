@@ -148,6 +148,7 @@ Wazuh / Rule 60115
 n8n
       ↓
 E-mail do administratora
+```
 
 ## Weryfikacja zgodności z CIS Benchmark
 
@@ -156,4 +157,4 @@ Wazuh Security Configuration Assessment (SCA) sprawdza konfigurację systemu ró
 Po zmianie polityki domenowej z `0` na `2` nieudane próby logowania kontrola SCA otrzymała status **passed**.
 
 ![CIS Account Lockout Threshold - Passed](../screenshots/06-cis-account-lockout-threshold-passed.png)
-```
+
