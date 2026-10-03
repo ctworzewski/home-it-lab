@@ -39,20 +39,6 @@ Kompletny scenariusz wykrywania blokady konta domenowego, automatycznego powiado
 
 ---
 
-------------------------- ---------------
-  Domena                       `cyber.local`
-  NetBIOS                      `CYBER`
-  Kontroler domeny             `LAB-DC1`
-  Stacja robocza               `LAB-W11-1`
-  Użytkownik testowy           `jkowalski`
-  Wazuh Manager                Wazuh 4.14.8
-  Automatyzacja                n8n
-  Analiza lokalna              Ollama
-  Event nieudanego logowania   `4625`
-  Event blokady konta          `4740`
-  Wazuh Rule ID                `60115`
-  Wazuh Rule Level             `9`
-
 ------------------------------------------------------------------------
 
 ## 1. Account Lockout Policy
