@@ -19,17 +19,17 @@ Głównym celem jest praktyczna nauka:
 
 ## Roadmapa projektów
 
-### Zakończone
+### ✅ Zakończone
 
-- [x] [01 – Wykrywanie nieudanych logowań Windows](docs/01-failed-logon-eventviewer.md)
-- [x] [02 – Analiza domyślnej reguły Wazuh dla Event ID 4625](docs/02-failed-logon-default-rule.md)
-- [x] [03 – Własna reguła Wazuh 119100](docs/03-custom-rule-119100.md)
-- [x] [04 – Integracja Wazuh + n8n + SMTP](docs/04-n8n-smtp-integration.md)
-- [x] [05 – Wykrywanie blokady konta Active Directory](docs/05-ad-account-lockout-detection.md)
+- ✅ [01 – Wykrywanie nieudanych logowań Windows](docs/01-failed-logon-eventviewer.md)
+- ✅ [02 – Analiza domyślnej reguły Wazuh dla Event ID 4625](docs/02-failed-logon-default-rule.md)
+- ✅ [03 – Własna reguła Wazuh 119100](docs/03-custom-rule-119100.md)
+- ✅ [04 – Integracja Wazuh + n8n + SMTP](docs/04-n8n-smtp-integration.md)
+- ✅ [05 – Wykrywanie blokady konta Active Directory](docs/05-ad-account-lockout-detection.md)
 
-### W trakcie
+### 🚧 W trakcie
 
-- [ ] [06 – Wykrywanie logowań na konta uprzywilejowane](docs/06-privileged-account-logon-detection.md)
+- 🚧 [06 – Wykrywanie logowań na konta uprzywilejowane](docs/06-privileged-account-logon-detection.md)
 
 Projekt `06` będzie rozwijany etapami o:
 
