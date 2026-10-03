@@ -29,6 +29,8 @@ Normalize 4740
         ↓
 IF 4740 + 60115
         ↓
+Ollama
+        ↓
 SMTP
         ↓
 E-mail administratora
