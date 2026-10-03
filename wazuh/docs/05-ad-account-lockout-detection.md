@@ -1,37 +1,45 @@
-# 05 --- Active Directory Account Lockout: Wazuh + n8n + Ollama
+# 🔐 Active Directory Account Lockout Detection
 
-## Cel projektu
+> **Windows → Active Directory → Wazuh → n8n → Ollama → SMTP**
 
-Celem projektu było zbudowanie kompletnego przepływu wykrywania blokady
-konta Active Directory w środowisku LAB:
+Kompletny scenariusz wykrywania blokady konta domenowego, automatycznego powiadomienia administratora oraz lokalnej analizy alertu przez AI.
 
-``` text
-Windows / Active Directory
-        ↓
-Wazuh
-        ↓
-n8n
-        ↓
-Ollama
-        ↓
-SMTP
-```
+## ✅ Status projektu
 
-Projekt obejmuje konfigurację polityki blokady konta, wygenerowanie
-kontrolowanego zdarzenia, analizę Windows Security Log, detekcję w
-Wazuh, automatyzację n8n, lokalną analizę AI oraz powiadomienie e-mail.
+**Etap podstawowy: ukończony**
 
-> **Status:** etap podstawowy ukończony. Detekcja blokady konta, n8n,
-> Ollama i SMTP działają. Zależność `4625 → 4740` została potwierdzona
-> na podstawie logów. Automatyczna korelacja tych zdarzeń pozostaje
-> możliwym kolejnym etapem rozwoju.
+- ✅ Windows Event ID `4625` — nieudane logowanie
+- ✅ Windows Event ID `4740` — blokada konta
+- ✅ Wazuh Rule ID `60115`
+- ✅ Wazuh SCA / CIS
+- ✅ Wazuh → n8n
+- ✅ lokalna analiza przez Ollama
+- ✅ powiadomienie SMTP
+- ✅ potwierdzenie zależności `4625 → 4740`
+- 🔜 automatyczna korelacja `4625 → 4740` jako możliwe rozszerzenie
 
-------------------------------------------------------------------------
+---
 
-## Środowisko LAB
+## 🖥️ Środowisko LAB
 
-  Element                      Wartość
-  ---------------------------- ---------------
+| Element | Wartość |
+| --- | --- |
+| **Domena** | `cyber.local` |
+| **NetBIOS** | `CYBER` |
+| **Kontroler domeny** | `LAB-DC1` |
+| **Stacja robocza** | `LAB-W11-1` |
+| **Użytkownik testowy** | `jkowalski` |
+| **Wazuh Manager** | `Wazuh 4.14.8` |
+| **Automatyzacja** | `n8n` |
+| **Analiza lokalna** | `Ollama` |
+| **Event nieudanego logowania** | `4625` |
+| **Event blokady konta** | `4740` |
+| **Wazuh Rule ID** | `60115` |
+| **Wazuh Rule Level** | `9` |
+
+---
+
+------------------------- ---------------
   Domena                       `cyber.local`
   NetBIOS                      `CYBER`
   Kontroler domeny             `LAB-DC1`
