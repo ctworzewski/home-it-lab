@@ -1,185 +1,197 @@
-# 05 --- Wykrywanie blokady konta Active Directory
+# 05 --- Active Directory Account Lockout: Wazuh + n8n + Ollama
 
 ## Cel projektu
 
-Celem projektu jest wykrywanie **blokady konta użytkownika Active
-Directory** za pomocą Wazuh oraz automatyczne powiadomienie
-administratora przez **n8n + SMTP**.
-
-W tym etapie konto jest blokowane przez politykę domenową Active
-Directory. Wazuh odpowiada za detekcję zdarzenia, a n8n za przetworzenie
-alertu i wysłanie czytelnego powiadomienia.
-
-### Aktualny przepływ
+Celem projektu było zbudowanie kompletnego przepływu wykrywania blokady
+konta Active Directory w środowisku LAB:
 
 ``` text
-2 × błędne hasło
+Windows / Active Directory
         ↓
-Active Directory Account Lockout Policy
+Wazuh
         ↓
-Event ID 4740 na LAB-DC1
-        ↓
-Wazuh Rule ID 60115 / Level 9
-        ↓
-Integracja Wazuh
-        ↓
-Webhook n8n
-        ↓
-Normalize 4740
-        ↓
-IF 4740 + 60115
+n8n
         ↓
 Ollama
         ↓
 SMTP
-        ↓
-E-mail administratora
 ```
 
-------------------------------------------------------------------------
+Projekt obejmuje konfigurację polityki blokady konta, wygenerowanie
+kontrolowanego zdarzenia, analizę Windows Security Log, detekcję w
+Wazuh, automatyzację n8n, lokalną analizę AI oraz powiadomienie e-mail.
 
-## Status projektu
-
-### Zrealizowane
-
--   [x] Sprawdzić politykę blokady konta w Active Directory
--   [x] Skonfigurować testowy próg 2 błędnych logowań
--   [x] Zweryfikować konfigurację GPO za pomocą PowerShell
--   [x] Wygenerować testową blokadę konta użytkownika
--   [x] Potwierdzić Event ID 4740 na kontrolerze domeny
--   [x] Sprawdzić, czy Wazuh odbiera zdarzenie 4740
--   [x] Zidentyfikować wbudowaną regułę Wazuh 60115
--   [x] Potwierdzić nazwę zablokowanego użytkownika i komputer źródłowy
--   [x] Zweryfikować CIS/SCA --- `failed` oraz `passed`
--   [x] Wysłać alert z Wazuh do n8n
--   [x] Znormalizować i odfiltrować `4740 / 60115` w n8n
--   [x] Przygotować czytelny e-mail dla administratora
--   [x] Przetestować cały przepływ Wazuh → n8n → SMTP
-
-### Kolejne etapy
-
--   [ ] Skorelować wcześniejsze zdarzenia `4625` z blokadą `4740`
--   [ ] Dodać adres IP źródła, jeżeli będzie dostępny w zdarzeniach
--   [ ] Wzbogacić alert o dane Active Directory
--   [ ] Rozbudować końcową wiadomość SMTP
--   [ ] Opcjonalnie dodać analizę lokalnym modelem Ollama
--   [ ] Wykonać finalny test korelacji i uzupełnić podsumowanie projektu
+> **Status:** etap podstawowy ukończony. Detekcja blokady konta, n8n,
+> Ollama i SMTP działają. Zależność `4625 → 4740` została potwierdzona
+> na podstawie logów. Automatyczna korelacja tych zdarzeń pozostaje
+> możliwym kolejnym etapem rozwoju.
 
 ------------------------------------------------------------------------
 
 ## Środowisko LAB
 
-  Element              Wartość
-  -------------------- ---------------
-  Domena               `cyber.local`
-  Domena NetBIOS       `CYBER`
-  Kontroler domeny     `LAB-DC1`
-  Stacja robocza       `LAB-W11-1`
-  Użytkownik testowy   `jkowalski`
-  Windows Event ID     `4740`
-  Wazuh Rule ID        `60115`
-  Wazuh Rule Level     `9`
+  Element                      Wartość
+  ---------------------------- ---------------
+  Domena                       `cyber.local`
+  NetBIOS                      `CYBER`
+  Kontroler domeny             `LAB-DC1`
+  Stacja robocza               `LAB-W11-1`
+  Użytkownik testowy           `jkowalski`
+  Wazuh Manager                Wazuh 4.14.8
+  Automatyzacja                n8n
+  Analiza lokalna              Ollama
+  Event nieudanego logowania   `4625`
+  Event blokady konta          `4740`
+  Wazuh Rule ID                `60115`
+  Wazuh Rule Level             `9`
 
 ------------------------------------------------------------------------
 
-# Etap 1 --- Detekcja i powiadomienie
+## 1. Account Lockout Policy
 
-## 1. Konfiguracja Account Lockout Policy
-
-Na potrzeby kontrolowanego testu w LAB ustawiono:
+Na potrzeby kontrolowanego testu ustawiono w domenie:
 
 ``` text
-Account lockout threshold: 2 błędne próby logowania
-Account lockout duration: 10 minut
-Reset account lockout counter after: 10 minut
+Account lockout threshold: 2
+Account lockout duration: 10 minutes
+Reset account lockout counter after: 10 minutes
 ```
 
-Konfigurację zweryfikowano zarówno w Group Policy Management, jak i za
-pomocą PowerShell.
+Próg `2` jest ustawieniem laboratoryjnym, które pozwala szybko i
+powtarzalnie wygenerować blokadę konta.
 
-![Konfiguracja Account Lockout
+![Account Lockout
 Policy](../screenshots/01-account-lockout-policy-gpo-powershell.png)
 
 ------------------------------------------------------------------------
 
 ## 2. Test blokady konta
 
-Na stacji `LAB-W11-1` wykonano dwie błędne próby logowania na konto
-domenowe `CYBER\jkowalski`.
+Na `LAB-W11-1` wykonano dwie nieudane próby logowania na istniejące
+konto:
 
-Po osiągnięciu skonfigurowanego progu Active Directory zablokowało
-konto.
+``` text
+CYBER\jkowalski
+```
 
-![Zablokowane konto na
+Po osiągnięciu skonfigurowanego progu konto zostało zablokowane.
+
+![Blokada konta na
 LAB-W11-1](../screenshots/09-account-lockout-lab-w11-1-final.png)
 
 ------------------------------------------------------------------------
 
-## 3. Event ID 4740 na kontrolerze domeny
+## 3. Zdarzenia źródłowe Windows
 
-Na `LAB-DC1` pojawiło się zdarzenie **4740 --- A user account was locked
-out**.
+### Event ID 4625 --- nieudane logowanie
+
+Na `LAB-W11-1` Windows Security Log zarejestrował nieudane próby
+logowania użytkownika `jkowalski` jako Event ID `4625`.
+
+W kontrolowanym teście były to dwa zdarzenia poprzedzające blokadę
+konta.
+
+![Windows Event ID
+4625](../screenshots/15-windows-event-4625-lab-w11-1.png)
+
+### Event ID 4740 --- blokada konta
+
+Po osiągnięciu progu blokady kontroler domeny `LAB-DC1` zarejestrował
+Event ID `4740`:
 
 ``` text
+A user account was locked out.
+
 Account Name:         jkowalski
 Caller Computer Name: LAB-W11-1
 Computer:             LAB-DC1.cyber.local
-Event ID:             4740
 ```
 
-Pole `Caller Computer Name` pozwala wskazać komputer, z którego
-pochodziły próby uwierzytelnienia prowadzące do blokady.
+`Caller Computer Name` wskazuje stację związaną z próbami
+uwierzytelnienia prowadzącymi do blokady.
 
-![Event ID 4740 na kontrolerze
-domeny](../screenshots/07-event-4740-domain-controller-final.png)
+![Windows Event ID
+4740](../screenshots/16-windows-event-4740-lab-dc1.png)
 
 ------------------------------------------------------------------------
 
 ## 4. Detekcja w Wazuh
 
-Wazuh odebrał Event ID `4740` z agenta `LAB-DC1`.
+Wazuh odebrał zdarzenie `4740` z agenta `LAB-DC1`.
 
-Nie było potrzeby tworzenia własnej reguły detekcyjnej, ponieważ Wazuh
-posiada wbudowaną regułę:
+Nie było potrzeby tworzenia własnej reguły dla samej blokady konta.
+Zdarzenie zostało wykryte przez wbudowaną regułę:
 
 ``` text
-Rule ID:      60115
-Rule Level:   9
-Description:  User account locked out (multiple login errors)
+Rule ID:     60115
+Level:       9
+Description: User account locked out (multiple login errors)
 ```
 
-![Detekcja Rule ID 60115 w
-Wazuh](../screenshots/08-wazuh-rule-60115-detection.png)
+![Wazuh Rule 60115](../screenshots/08-wazuh-rule-60115-detection.png)
 
-Szczegóły dokumentu potwierdzają Event ID `4740`, konto `jkowalski` oraz
-`Caller Computer Name: LAB-W11-1`.
+Szczegóły alertu w Wazuh potwierdzają zdarzenie `4740` oraz dane konta i
+komputera.
 
-![Szczegóły Event ID 4740 w
-Wazuh](../screenshots/11-wazuh-event-4740-details-final.png)
-
-------------------------------------------------------------------------
-
-## 5. Weryfikacja CIS / SCA
-
-Wazuh Security Configuration Assessment (SCA) wykorzystano do
-sprawdzenia ustawienia `Account lockout threshold`.
-
-Przy wartości `0` kontrola została oznaczona jako **failed**. Po
-ustawieniu niezerowego progu zgodnego z wymaganiem kontroli wynik
-zmienił się na **passed**.
-
-![CIS Account Lockout Threshold -
-porównanie](../screenshots/06-cis-account-lockout-threshold-comparison.png)
-
-Źródło: [CIS Password Policy
-Guide](https://www.cisecurity.org/insights/white-papers/cis-password-policy-guide)
+![Wazuh Event 4740
+details](../screenshots/11-wazuh-event-4740-details-final.png)
 
 ------------------------------------------------------------------------
 
-## 6. Integracja Wazuh → n8n
+## 5. CIS / Security Configuration Assessment
 
-Wazuh Manager przekazuje do dedykowanego webhooka n8n alerty dla Rule ID
-`60115`.
+Wazuh SCA wykorzystano jako dodatkową kontrolę konfiguracji Account
+Lockout Threshold.
+
+Przy niezerowym progu test SCA dla tego ustawienia przechodzi jako
+`passed`.
+
+![CIS Account Lockout
+Threshold](../screenshots/06-cis-account-lockout-threshold-passed.png)
+
+SCA jest w tym projekcie dodatkowym elementem kontroli konfiguracji. Nie
+zastępuje testu działania polityki domenowej.
+
+------------------------------------------------------------------------
+
+## 6. Potwierdzenie zależności 4625 → 4740
+
+Podczas kontrolowanego testu zaobserwowano:
+
+``` text
+LAB-W11-1
+   │
+   ├── Event 4625 → Logon Failure → jkowalski
+   ├── Event 4625 → Logon Failure → jkowalski
+   │
+   ▼
+Active Directory Account Lockout Policy
+   │
+   ▼
+LAB-DC1
+   │
+   └── Event 4740 → Account Locked → jkowalski
+                    Caller Computer: LAB-W11-1
+```
+
+W Wazuh zdarzenia były widoczne na dwóch agentach: `LAB-W11-1` dla
+nieudanych logowań oraz `LAB-DC1` dla blokady konta.
+
+![Korelacja 4625 i
+4740](../screenshots/13-wazuh-correlation-4625-4740.png)
+
+**Ważne:** na tym etapie zależność została potwierdzona na podstawie
+danych i osi czasu. Workflow n8n nie wykonuje jeszcze automatycznego
+łączenia wcześniejszych `4625` z późniejszym `4740`.
+
+------------------------------------------------------------------------
+
+## 7. Integracja Wazuh → n8n
+
+Alert Wazuh Rule ID `60115` jest przekazywany do dedykowanego webhooka
+n8n.
+
+Przykład konfiguracji integracji:
 
 ``` xml
 <integration>
@@ -190,13 +202,7 @@ Wazuh Manager przekazuje do dedykowanego webhooka n8n alerty dla Rule ID
 </integration>
 ```
 
-Istniejący skrypt integracyjny został ponownie wykorzystany, ponieważ
-adres webhooka pobiera z argumentu przekazanego przez konfigurację Wazuh
-zamiast posiadać adres wpisany na stałe.
-
-------------------------------------------------------------------------
-
-## 7. Workflow n8n
+Workflow:
 
 ``` text
 Wazuh Webhook
@@ -205,223 +211,173 @@ Normalize 4740
       ↓
 IF 4740 + 60115
       ↓
+Message a model / Ollama
+      ↓
 SMTP - Account Lockout
 ```
 
-`Normalize 4740` przygotowuje najważniejsze pola zdarzenia, a
-`IF 4740 + 60115` przepuszcza tylko oczekiwany typ alertu.
-
-Test produkcyjnego webhooka zakończył się sukcesem.
-
-![Workflow n8n dla blokady
-konta](../screenshots/10-n8n-account-lockout-workflow.png)
+![Workflow n8n](../screenshots/10-n8n-account-lockout-workflow.png)
 
 ------------------------------------------------------------------------
 
-## 8. Powiadomienie SMTP
+## 8. Lokalna analiza AI --- Ollama
 
-Finalne powiadomienie zawiera:
+Workflow został rozszerzony o lokalny model uruchomiony przez Ollama.
 
-``` text
-Użytkownik:           jkowalski
-Komputer źródłowy:    LAB-W11-1
-Kontroler / agent:    LAB-DC1
-Event ID:             4740
-Rule ID:              60115
-Level:                9
-Czas:                 timestamp zdarzenia
-```
-
-Wiadomość przypomina również administratorowi, że sama blokada konta nie
-oznacza automatycznie ataku i wymaga weryfikacji.
-
-![Finalne powiadomienie SMTP o blokadzie
-konta](../screenshots/12-final-smtp-account-lockout-alert.png)
-
-------------------------------------------------------------------------
-
-## Wynik Etapu 1
-
-Pełny przepływ został potwierdzony:
-
-``` text
-LAB-W11-1
-   ↓  błędne logowania
-Active Directory
-   ↓  blokada konta
-LAB-DC1 / Event 4740
-   ↓
-Wazuh / Rule 60115
-   ↓
-n8n
-   ↓
-SMTP
-   ↓
-Administrator
-```
-
-Detekcja i automatyczne powiadomienie są gotowe. Projekt może zostać
-rozszerzony o korelację zdarzeń poprzedzających blokadę.
-
-------------------------------------------------------------------------
-
-# Etap 2 --- Korelacja Event ID 4625 → 4740
-
-## Cel
-
-Odnaleźć nieudane logowania poprzedzające blokadę konta i powiązać je ze
-zdarzeniem `4740`.
-
-### Do wykonania
-
--   [ ] odnaleźć Event ID `4625` dotyczące zablokowanego użytkownika,
--   [ ] określić okno czasowe przed `4740`,
--   [ ] powiązać zdarzenia po użytkowniku i komputerze źródłowym,
--   [ ] pobrać `IpAddress`, jeżeli występuje w zdarzeniu `4625`,
--   [ ] policzyć liczbę błędnych logowań poprzedzających blokadę,
--   [ ] przekazać wzbogacone dane do n8n.
-
-Docelowo:
-
-``` text
-Użytkownik:                   jkowalski
-Komputer źródłowy:            LAB-W11-1
-Adres IP źródła:              10.1.201.x
-Błędne logowania przed 4740:  X
-```
-
-> Adres IP nie może być pobierany z nagłówków HTTP webhooka jako adres
-> komputera źródłowego. Żądanie do n8n wysyła Wazuh Manager, dlatego
-> `X-Real-IP` / `X-Forwarded-For` wskazuje nadawcę webhooka.
-
-------------------------------------------------------------------------
-
-# Etap 3 --- Wzbogacenie alertu o dane Active Directory
-
-Planowane informacje:
-
--   stan `Enabled`,
--   stan `LockedOut`,
--   Display Name,
--   Password Last Set,
--   informacje o ostatnim logowaniu,
--   wybrane członkostwa w grupach.
-
-Ten etap ma dostarczyć administratorowi dodatkowy kontekst. Nie będzie
-automatycznie modyfikował ani odblokowywał konta.
-
-------------------------------------------------------------------------
-
-# Etap 4 --- Rozbudowa powiadomienia
-
-Po wykonaniu korelacji finalny alert może zawierać:
-
-``` text
-Użytkownik
-Komputer źródłowy
-Adres IP źródła
-Liczba błędnych logowań
-Stan konta AD
-Kontroler domeny
-Event ID
-Wazuh Rule ID
-Rule Level
-Czas zdarzenia
-```
-
-------------------------------------------------------------------------
-
-# Etap 5 --- Opcjonalna analiza Ollama
-
-Po wdrożeniu korelacji n8n może przekazać przygotowany kontekst do
-lokalnego modelu Ollama.
-
-Model powinien przygotować krótką analizę:
+Model otrzymuje kontekst alertu i generuje krótką analizę dla
+administratora:
 
 1.  co się wydarzyło,
 2.  dlaczego zdarzenie może być istotne,
-3.  co administrator powinien sprawdzić.
+3.  co administrator powinien zweryfikować.
 
-AI nie powinno klasyfikować zdarzenia jako ataku bez wystarczających
-dowodów.
-
-------------------------------------------------------------------------
-
-# Etap 6 --- Finalny test projektu
-
-Docelowy przepływ:
+Przykładowa zasada promptu:
 
 ``` text
-Błędne uwierzytelnienia
-        ↓
-Event ID 4625
-        ↓
-Blokada konta
-        ↓
-Event ID 4740
-        ↓
-Wazuh
-        ↓
-Korelacja / wzbogacenie w n8n
-        ↓
-SMTP
-        ↓
-Powiadomienie administratora
+Nie oceniaj zdarzenia jako atak bez wystarczających dowodów.
+Opisz krótko zdarzenie, jego znaczenie i zalecane sprawdzenia.
 ```
 
-Po zakończeniu zostaną dodane finalne zrzuty ekranu oraz krótkie
-podsumowanie problemów i wniosków z konfiguracji.
+Ollama **nie odpowiada za detekcję ani blokowanie konta**. Detekcja
+pozostaje oparta na Windows Event ID `4740` i Wazuh Rule ID `60115`. AI
+pełni rolę pomocniczą przy interpretacji alertu.
+
+![n8n + Ollama + SMTP](../screenshots/14-wazuh-n8n-ollama-smtp.png)
 
 ------------------------------------------------------------------------
 
-## Możliwe przyczyny blokady konta
+## 9. Finalne powiadomienie SMTP
 
-Blokada konta nie oznacza automatycznie ataku. Możliwe przyczyny to
-m.in.:
-
--   użytkownik kilkukrotnie podał błędne hasło,
--   stare hasło zapisane w Windows Credential Manager,
--   rozłączona sesja RDP,
--   mapowany dysk sieciowy,
--   zadanie harmonogramu korzystające ze starego hasła,
--   usługa Windows działająca na koncie domenowym,
--   urządzenie lub aplikacja korzystająca ze starego hasła,
--   powtarzające się próby uwierzytelnienia z innej stacji.
-
-------------------------------------------------------------------------
-
-## Struktura repozytorium
+Finalny e-mail zawiera m.in.:
 
 ``` text
-home-it-lab/
-└── wazuh/
-    ├── configs/
-    ├── docs/
-    │   ├── 01-architecture.md
-    │   ├── 02-failed-logon-default-rule.md
-    │   ├── 03-custom-rule-n8n-integration.md
-    │   ├── 04-n8n-smtp-integration.md
-    │   └── 05-ad-account-lockout-detection.md
-    ├── screenshots/
-    └── scripts/
+Użytkownik:       jkowalski
+Komputer źródłowy: LAB-W11-1
+Kontroler / agent: LAB-DC1
+Event ID:          4740
+Wazuh Rule ID:     60115
+Poziom alertu:     9
+```
+
+Dodatkowo wiadomość zawiera sekcję **Lokalna analiza AI / Analiza
+Ollama** oraz informację, że sama blokada konta nie oznacza
+automatycznie ataku.
+
+![Finalny SMTP z analizą
+Ollama](../screenshots/17-final-smtp-ollama-account-lockout.png)
+
+------------------------------------------------------------------------
+
+## 10. Dlaczego 4625 nie zawsze oznacza blokadę?
+
+Event ID `4625` oznacza nieudane logowanie, ale nie każda taka próba
+prowadzi do blokady.
+
+Przykładowo zdarzenie może dotyczyć:
+
+-   błędnego hasła,
+-   nieistniejącej nazwy użytkownika,
+-   zapisanych starych poświadczeń,
+-   usługi lub zadania korzystającego ze starego hasła.
+
+Event ID `4740` oznacza natomiast, że istniejące konto zostało
+faktycznie zablokowane przez Active Directory.
+
+Dlatego:
+
+``` text
+4625 ≠ automatycznie 4740
 ```
 
 ------------------------------------------------------------------------
 
-## Co projekt pokazuje w portfolio
+## 11. Co zostało wykonane
+
+-   [x] konfiguracja Account Lockout Policy,
+-   [x] kontrolowany test blokady konta,
+-   [x] analiza Windows Event ID `4625`,
+-   [x] analiza Windows Event ID `4740`,
+-   [x] detekcja blokady przez Wazuh Rule `60115`,
+-   [x] dodatkowa weryfikacja konfiguracji przez Wazuh SCA,
+-   [x] przekazanie alertu Wazuh do n8n,
+-   [x] normalizacja danych `4740`,
+-   [x] filtrowanie `4740 + 60115`,
+-   [x] lokalna analiza przez Ollama,
+-   [x] finalne powiadomienie SMTP,
+-   [x] ręczne potwierdzenie zależności `4625 → 4740`.
+
+------------------------------------------------------------------------
+
+## 12. Możliwe dalsze rozwinięcie
+
+Obecna wersja projektu jest zakończonym, działającym scenariuszem
+detekcji i powiadamiania.
+
+Opcjonalnym kolejnym etapem może być **automatyczna korelacja**. Po
+otrzymaniu `4740` n8n lub warstwa korelacyjna mogłaby odnaleźć
+wcześniejsze `4625` dla tego samego użytkownika i komputera, a następnie
+utworzyć jeden wzbogacony incydent.
+
+Przykład docelowego kontekstu:
+
+``` text
+Użytkownik:             jkowalski
+Komputer:               LAB-W11-1
+Nieudane logowania:     2
+Event źródłowy:         4625
+Event blokady:          4740
+Agent 4625:             LAB-W11-1
+Agent 4740:             LAB-DC1
+Status:                 KONTO ZABLOKOWANE
+```
+
+Nie jest to wymagane do działania obecnego rozwiązania.
+
+------------------------------------------------------------------------
+
+## 13. Czego projekt uczy / co pokazuje
 
 Projekt pokazuje praktyczną pracę z:
 
--   Windows Security Events,
 -   Active Directory i Group Policy,
--   Wazuh i analizą reguł SIEM,
--   Wazuh SCA / CIS Benchmark,
+-   Windows Security Event Log,
+-   Event ID `4625` i `4740`,
+-   Wazuh SIEM,
+-   Wazuh SCA,
+-   analizą zdarzeń pochodzących z różnych hostów,
 -   integracją webhook,
--   n8n i normalizacją JSON,
--   filtrowaniem zdarzeń,
+-   n8n,
+-   przetwarzaniem JSON,
 -   SMTP,
--   podstawową analizą incydentu,
--   rozwijaną korelacją zdarzeń `4625 → 4740`.
+-   lokalnym modelem Ollama,
+-   wykorzystaniem AI jako warstwy wspomagającej analizę bezpieczeństwa,
+-   dokumentowaniem i testowaniem kompletnego przepływu alertu.
 
-Projekt został wykonany jako praktyczne środowisko **Home IT Lab**, a
-nie gotowe rozwiązanie produkcyjne.
+------------------------------------------------------------------------
+
+## Podsumowanie
+
+Projekt realizuje działający przepływ:
+
+``` text
+Nieudane logowanie
+      ↓
+Windows Security Log
+      ↓
+Active Directory blokuje konto
+      ↓
+Event ID 4740
+      ↓
+Wazuh Rule 60115
+      ↓
+n8n
+      ↓
+Ollama
+      ↓
+SMTP
+      ↓
+Administrator otrzymuje alert
+```
+
+Etap podstawowy projektu został ukończony. Automatyczna korelacja
+`4625 → 4740` może zostać dodana w przyszłości jako osobne rozszerzenie.
