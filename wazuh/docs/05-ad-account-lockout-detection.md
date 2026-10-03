@@ -39,8 +39,6 @@ Kompletny scenariusz wykrywania blokady konta domenowego, automatycznego powiado
 
 ---
 
-------------------------------------------------------------------------
-
 ## 1. Account Lockout Policy
 
 Na potrzeby kontrolowanego testu ustawiono w domenie:
