@@ -2,165 +2,94 @@
 
 ## Cel projektu
 
-Celem projektu jest wykrywanie i analiza logowań na konta uprzywilejowane w środowisku Active Directory.
+Celem projektu jest wykrywanie i analiza logowań na konta uprzywilejowane w środowisku Active Directory oraz monitorowanie aktywności wykonywanej po zalogowaniu.
 
-Projekt ma pozwolić na szybką identyfikację sytuacji, w której konto posiadające podwyższone uprawnienia zostaje użyte do logowania, a następnie wzbogacić alert o najważniejsze informacje potrzebne administratorowi do weryfikacji zdarzenia.
+Projekt ma odpowiedzieć nie tylko na pytanie:
 
-Projekt jest kolejnym krokiem po prostych detekcjach opartych o pojedyncze Event ID i ma wprowadzić korelację kilku zdarzeń oraz analizę kontekstu logowania.
+> **Kto i skąd zalogował się na konto uprzywilejowane?**
+
+ale również:
+
+> **Co użytkownik zrobił po zalogowaniu i czy jego aktywność wymaga dodatkowej weryfikacji?**
+
+Projekt jest kolejnym krokiem po prostych detekcjach opartych o pojedyncze Event ID. Jego głównym celem jest nauka korelacji kilku źródeł logów, budowania własnych reguł detekcji oraz automatycznej reakcji na wybrane zdarzenia.
 
 ---
 
-## Przykładowy scenariusz
+## Zakres projektu
 
-Administrator loguje się na konto uprzywilejowane.
+Projekt obejmuje:
 
-Windows zapisuje m.in.:
+- wykrywanie logowań na konta uprzywilejowane,
+- analizę zdarzeń Windows Security,
+- monitoring procesów za pomocą Sysmon,
+- monitoring wykonywanego kodu PowerShell,
+- korelację zdarzeń w Wazuh,
+- wzbogacanie alertów o dodatkowy kontekst,
+- integrację z n8n,
+- powiadomienia e-mail,
+- test mechanizmu Wazuh Active Response.
+
+---
+
+## Etap 1 – Logowanie na konto uprzywilejowane
+
+Podstawą projektu będzie analiza zdarzeń:
 
 - Event ID `4624` – udane logowanie,
-- Event ID `4672` – specjalne uprawnienia przypisane do nowej sesji.
+- Event ID `4672` – specjalne uprawnienia przypisane do nowej sesji,
+- Event ID `4625` – nieudane logowanie.
 
-Wazuh wykrywa zdarzenie i analizuje dodatkowe informacje:
+Wazuh powinien zebrać i zaprezentować m.in.:
 
 - użytkownika,
+- domenę,
 - host,
 - źródłowy adres IP,
+- nazwę stacji źródłowej,
 - typ logowania,
-- domenę,
-- wcześniejsze nieudane próby logowania.
+- czas zdarzenia.
 
-Na tej podstawie generowany jest alert przekazywany dalej do n8n.
-
----
-
-## Planowany przepływ
+### Przykładowy scenariusz
 
 ```text
-Windows / Active Directory
+Użytkownik uprzywilejowany
         ↓
-      Wazuh
+Udane logowanie
         ↓
-Detekcja 4624 / 4672
+Windows Event ID 4624
         ↓
-Korelacja i wzbogacenie alertu
+Windows Event ID 4672
         ↓
-       n8n
+Wazuh
         ↓
-Analiza zdarzenia
-        ↓
-      E-mail
+Alert bezpieczeństwa
 ```
 
 ---
 
-## Założenia projektu
-
-- [ ] Monitorowanie Event ID `4624`
-- [ ] Monitorowanie Event ID `4672`
-- [ ] Identyfikacja kont uprzywilejowanych
-- [ ] Korelacja logowania z przyznaniem specjalnych uprawnień
-- [ ] Pobranie nazwy użytkownika
-- [ ] Pobranie domeny
-- [ ] Pobranie nazwy hosta
-- [ ] Pobranie źródłowego adresu IP
-- [ ] Pobranie typu logowania
-- [ ] Weryfikacja wcześniejszych zdarzeń `4625`
-- [ ] Utworzenie własnej reguły Wazuh
-- [ ] Test logowania kontem administracyjnym
-- [ ] Przekazanie alertu do n8n
-- [ ] Przygotowanie czytelnego powiadomienia e-mail
-- [ ] Dokumentacja wyników i screenshoty
-- [ ] Instalacja i konfiguracja Sysmon
-- [ ] Monitoring Sysmon Event ID `1`
-- [ ] Monitoring Sysmon Event ID `3`
-- [ ] Włączenie PowerShell Script Block Logging
-- [ ] Monitoring Event ID `4104`
-- [ ] Korelacja logowania konta uprzywilejowanego z uruchomieniem PowerShell
-- [ ] Przygotowanie własnej reguły dla podejrzanego zachowania
-- [ ] Active Response – zakończenie procesu PowerShell
-- [ ] Active Response – test czasowej izolacji hosta w LAB
-
----
-
-## Informacje, które powinien zawierać alert
-
-Docelowy alert powinien zawierać co najmniej:
-
-| Pole | Opis |
-|---|---|
-| Host | komputer, na którym wykryto logowanie |
-| Użytkownik | konto uprzywilejowane |
-| Domena | domena Active Directory |
-| Event ID | zdarzenie Windows |
-| Rule ID | reguła Wazuh |
-| Logon Type | typ logowania |
-| Source IP | adres źródłowy |
-| Workstation | komputer źródłowy |
-| Timestamp | czas zdarzenia |
-| Previous Failed Logons | wcześniejsze nieudane próby logowania |
-
----
-
-## Co chcę osiągnąć
-
-Projekt ma pozwolić mi przejść od prostego wykrywania pojedynczych zdarzeń do bardziej świadomej analizy aktywności kont uprzywilejowanych.
-
-Główne cele edukacyjne:
-
-- lepsze zrozumienie logów bezpieczeństwa Windows,
-- analiza Event ID `4624` i `4672`,
-- korelacja zdarzeń w Wazuh,
-- budowanie własnych reguł detekcji,
-- wzbogacanie alertów o dodatkowy kontekst,
-- integracja Wazuh z n8n,
-- tworzenie alertów przydatnych z punktu widzenia administratora i SOC.
-
----
-
-## Kryterium zakończenia projektu
-
-Projekt zostanie uznany za zakończony, gdy:
-
-- Wazuh poprawnie wykryje logowanie na konto uprzywilejowane,
-- alert będzie zawierał najważniejsze informacje o logowaniu,
-- zdarzenie zostanie przekazane do n8n,
-- n8n wygeneruje czytelne powiadomienie e-mail,
-- scenariusz zostanie przetestowany w środowisku LAB,
-- całość zostanie udokumentowana na GitHub.
-
----
-
-## Status
-
-🚧 **Projekt w trakcie realizacji**
-
-Kolejne etapy będą dodawane wraz z rozwojem projektu.
-
-
----
-
-## Rozszerzenie projektu – Sysmon i PowerShell
+## Etap 2 – Sysmon
 
 Po wykryciu logowania na konto uprzywilejowane projekt zostanie rozszerzony o monitoring aktywności wykonywanej po zalogowaniu.
 
-Celem będzie sprawdzenie nie tylko **kto się zalogował**, ale również **co zrobił po zalogowaniu**.
+Do tego celu zostanie wykorzystany Sysmon.
 
-### Sysmon
-
-Planowane jest wdrożenie Sysmon i monitorowanie wybranych zdarzeń, przede wszystkim:
+Na początek monitorowane będą przede wszystkim:
 
 - Event ID `1` – Process Create,
 - Event ID `3` – Network Connection.
 
-Najważniejszym elementem będzie wykrywanie uruchomienia:
+Najważniejszym elementem będzie wykrywanie uruchomienia procesów takich jak:
 
 - `powershell.exe`,
 - `pwsh.exe`,
 - `cmd.exe`.
 
-Przykładowe informacje zbierane z Sysmon:
+### Informacje analizowane z Sysmon
 
 - użytkownik,
-- uruchomiony proces,
+- nazwa procesu,
+- ścieżka procesu,
 - proces nadrzędny,
 - CommandLine,
 - Process ID,
@@ -168,7 +97,7 @@ Przykładowe informacje zbierane z Sysmon:
 - adres docelowy,
 - port docelowy.
 
-Przykładowy scenariusz:
+### Przykładowy scenariusz
 
 ```text
 4624 / 4672
@@ -177,27 +106,29 @@ Logowanie konta uprzywilejowanego
         ↓
 Sysmon Event ID 1
         ↓
-Uruchomienie powershell.exe
+powershell.exe
         ↓
-Analiza CommandLine
+Analiza procesu i CommandLine
 ```
 
 ---
 
-## PowerShell Script Block Logging
+## Etap 3 – PowerShell Script Block Logging
 
-Projekt zostanie rozszerzony również o PowerShell Script Block Logging.
+Sam fakt uruchomienia `powershell.exe` nie musi oznaczać podejrzanej aktywności.
+
+Dlatego projekt zostanie rozszerzony o PowerShell Script Block Logging.
 
 Najważniejsze zdarzenie:
 
 - Event ID `4104` – wykonany kod PowerShell.
 
-Pozwoli to analizować nie tylko samo uruchomienie `powershell.exe`, ale również polecenia i fragmenty kodu wykonywane w PowerShell.
+Pozwoli to analizować nie tylko uruchomienie procesu PowerShell, ale również wykonywane polecenia i fragmenty skryptów.
 
-Planowany przepływ:
+### Planowany przepływ
 
 ```text
-Privileged Account Login
+Logowanie konta uprzywilejowanego
         ↓
 Sysmon Event ID 1
         ↓
@@ -212,22 +143,70 @@ Korelacja zdarzeń
 
 ---
 
-## Active Response
+## Etap 4 – Korelacja w Wazuh
+
+Docelowo alert nie powinien być generowany wyłącznie na podstawie pojedynczego zdarzenia.
+
+Projekt ma umożliwić korelację kilku elementów, np.:
+
+```text
+Konto uprzywilejowane
+        +
+Udane logowanie
+        +
+Uruchomienie PowerShell
+        +
+Określone polecenie
+        =
+Alert o podwyższonym poziomie
+```
+
+Dodatkowo możliwa będzie analiza wcześniejszych zdarzeń `4625`, aby sprawdzić, czy przed poprawnym logowaniem występowały nieudane próby uwierzytelnienia.
+
+---
+
+## Etap 5 – Integracja z n8n
+
+Po wykryciu zdarzenia Wazuh przekaże alert do n8n.
+
+n8n będzie odpowiedzialny za przygotowanie czytelnego powiadomienia zawierającego najważniejsze informacje o zdarzeniu.
+
+### Informacje w alercie
+
+| Pole | Opis |
+|---|---|
+| Host | komputer, na którym wykryto aktywność |
+| Użytkownik | konto uprzywilejowane |
+| Domena | domena Active Directory |
+| Event ID | zdarzenie Windows / Sysmon |
+| Rule ID | reguła Wazuh |
+| Logon Type | typ logowania |
+| Source IP | źródłowy adres IP |
+| Workstation | komputer źródłowy |
+| Process | uruchomiony proces |
+| Parent Process | proces nadrzędny |
+| CommandLine | linia poleceń |
+| Timestamp | czas zdarzenia |
+| Previous Failed Logons | wcześniejsze nieudane próby logowania |
+
+---
+
+## Etap 6 – Wazuh Active Response
 
 Końcowym etapem projektu będzie wykorzystanie mechanizmu Wazuh Active Response.
 
-Reakcja nie będzie uruchamiana po samym wykryciu PowerShella.
+Active Response **nie będzie uruchamiany po samym wykryciu PowerShella**.
 
-Active Response zostanie wywołany dopiero po spełnieniu określonych warunków, np.:
+Reakcja zostanie wykonana dopiero po spełnieniu określonych warunków, np.:
 
 - logowanie na konto uprzywilejowane,
 - uruchomienie PowerShell,
 - wykrycie określonego polecenia lub wzorca,
-- podniesiony poziom alertu Wazuh.
+- wygenerowanie przez Wazuh alertu o odpowiednio wysokim poziomie.
 
 ### Active Response – etap 1
 
-Pierwszym scenariuszem będzie automatyczne zakończenie procesu PowerShell.
+Pierwszym testowanym scenariuszem będzie automatyczne zakończenie procesu PowerShell.
 
 Planowana reakcja:
 
@@ -237,27 +216,8 @@ Planowana reakcja:
 - zapisanie hosta,
 - zakończenie procesu `powershell.exe`,
 - zapisanie informacji o wykonanej reakcji,
-- wysłanie alertu przez n8n.
-
-Przepływ:
-
-```text
-Privileged Account Login
-        ↓
-PowerShell uruchomiony
-        ↓
-Podejrzane polecenie
-        ↓
-Wazuh Rule
-        ↓
-Active Response
-        ↓
-Zakończenie procesu
-        ↓
-n8n
-        ↓
-E-mail
-```
+- przekazanie informacji do n8n,
+- wysłanie powiadomienia e-mail.
 
 ### Active Response – etap 2
 
@@ -269,13 +229,13 @@ Przykładowy scenariusz:
 - Active Response uruchamia skrypt,
 - Windows Firewall ogranicza ruch sieciowy hosta,
 - pozostawiony zostaje dostęp wymagany do obsługi incydentu,
-- po określonym czasie host może zostać automatycznie przywrócony do normalnego stanu.
+- po określonym czasie host zostaje przywrócony do normalnego stanu.
 
 Ta część będzie wykonywana wyłącznie w środowisku LAB.
 
 ---
 
-## Docelowy scenariusz projektu
+## Docelowy przepływ projektu
 
 ```text
 Active Directory
@@ -294,7 +254,7 @@ Wazuh
         ↓
 Korelacja zdarzeń
         ↓
-Ocena reguły
+Własna reguła detekcji
         ↓
 Active Response
         ↓
@@ -302,23 +262,75 @@ Zakończenie procesu / izolacja hosta
         ↓
 n8n
         ↓
-E-mail z informacją o incydencie
+Powiadomienie e-mail
 ```
 
 ---
 
-## Dodatkowe cele edukacyjne
+## Checklista
 
-Rozszerzenie projektu ma pozwolić nauczyć się:
+- [ ] Monitorowanie Event ID `4624`
+- [ ] Monitorowanie Event ID `4672`
+- [ ] Monitorowanie Event ID `4625`
+- [ ] Identyfikacja kont uprzywilejowanych
+- [ ] Pobranie użytkownika, domeny, hosta i Source IP
+- [ ] Analiza Logon Type
+- [ ] Instalacja i konfiguracja Sysmon
+- [ ] Monitoring Sysmon Event ID `1`
+- [ ] Monitoring Sysmon Event ID `3`
+- [ ] Monitoring `powershell.exe`, `pwsh.exe` i `cmd.exe`
+- [ ] Włączenie PowerShell Script Block Logging
+- [ ] Monitoring Event ID `4104`
+- [ ] Korelacja logowania z aktywnością procesu
+- [ ] Korelacja z wcześniejszymi zdarzeniami `4625`
+- [ ] Utworzenie własnej reguły Wazuh
+- [ ] Test scenariusza w środowisku LAB
+- [ ] Przekazanie alertu do n8n
+- [ ] Przygotowanie powiadomienia e-mail
+- [ ] Active Response – zakończenie procesu PowerShell
+- [ ] Active Response – test czasowej izolacji hosta
+- [ ] Dokumentacja wyników
+- [ ] Dodanie screenshotów z testów
 
-- wdrażania i konfiguracji Sysmon,
-- analizy Process Create,
+---
+
+## Czego chcę się nauczyć
+
+Projekt ma pozwolić mi rozwinąć umiejętności w zakresie:
+
+- analizy Windows Security Logs,
+- konfiguracji i analizy Sysmon,
 - analizy relacji Parent / Child Process,
 - analizy CommandLine,
 - PowerShell Script Block Logging,
 - korelacji kilku źródeł logów,
-- budowania własnych reguł Wazuh,
-- reagowania na incydenty przy użyciu Active Response,
-- automatyzacji reakcji,
-- wzbogacania alertów w n8n,
-- budowania prostego scenariusza SOC / Detection Engineering.
+- tworzenia własnych reguł Wazuh,
+- integracji Wazuh z n8n,
+- automatyzacji reakcji na incydenty,
+- wykorzystania Wazuh Active Response,
+- budowania praktycznych scenariuszy Detection Engineering / SOC.
+
+---
+
+## Kryterium zakończenia projektu
+
+Projekt zostanie uznany za zakończony, gdy:
+
+- Wazuh poprawnie wykryje logowanie na konto uprzywilejowane,
+- zostanie wykryte uruchomienie PowerShell lub CMD po zalogowaniu,
+- Sysmon poprawnie przekaże informacje o procesie,
+- PowerShell Script Block Logging dostarczy zdarzenia `4104`,
+- Wazuh skoreluje wybrane zdarzenia,
+- alert będzie zawierał najważniejszy kontekst dotyczący aktywności,
+- zdarzenie zostanie przekazane do n8n,
+- n8n wygeneruje czytelne powiadomienie e-mail,
+- Active Response zostanie poprawnie przetestowany w środowisku LAB,
+- cały scenariusz zostanie udokumentowany na GitHub.
+
+---
+
+## Status
+
+🚧 **Projekt w trakcie realizacji**
+
+Kolejne etapy będą dodawane wraz z rozwojem projektu.
