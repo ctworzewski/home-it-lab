@@ -1,328 +1,548 @@
-# 🛡️ Wazuh Security Monitoring Lab
+# \# 🛡️ Wazuh Security Monitoring Lab
 
-Praktyczne laboratorium do nauki monitoringu bezpieczeństwa, analizy zdarzeń Windows oraz tworzenia detekcji w systemie Wazuh.
+# 
 
-Projekt jest częścią mojego środowiska **Home IT Lab** i służy do praktycznego poznawania monitoringu infrastruktury Windows, Active Directory oraz podstaw pracy z systemem SIEM.
+# Praktyczne laboratorium \*\*Windows Security / Active Directory / Wazuh\*\*,
 
----
+# rozwijane jako część mojego \*\*Home IT Lab\*\*.
 
-## 🖥️ Środowisko
+# 
 
-| Host | System | Rola |
-|---|---|---|
-| WAZUH-SRV | Ubuntu Server | Wazuh Manager |
-| LAB-DC1 | Windows Server 2025 | Kontroler domeny Active Directory |
-| LAB-W11-1 | Windows 11 | Stacja robocza w domenie |
-| LAB-W11-2 | Windows 11 | Stacja robocza w domenie |
+# Celem projektu jest nie tylko wygenerowanie alertu w SIEM, ale
 
-Wszystkie hosty Windows posiadają zainstalowane agenty Wazuh i przesyłają zdarzenia do centralnego serwera Wazuh.
+# prześledzenie całej ścieżki zdarzenia --- od Windows Event Log, przez
 
----
+# detekcję w Wazuh, aż po automatyzację, powiadomienie i lokalną analizę
 
-## 🎯 Cele projektu
+# AI.
 
-Celem projektu jest praktyczna nauka:
+# 
 
-- monitorowania zdarzeń systemu Windows,
-- analizy logów bezpieczeństwa,
-- monitorowania Active Directory,
-- wykrywania nieudanych prób logowania,
-- monitorowania tworzenia i usuwania kont użytkowników,
-- monitorowania zmian członkostwa w grupach,
-- wykrywania zmian w grupach uprzywilejowanych,
-- monitorowania aktywności PowerShell,
-- File Integrity Monitoring,
-- monitorowania zdarzeń Microsoft Defender,
-- tworzenia własnych reguł Wazuh,
-- analizy alertów,
-- konfiguracji powiadomień,
-- dokumentowania scenariuszy bezpieczeństwa.
+# \## 🔐 Aktualnie ukończony projekt
 
----
+# 
 
-## 🧪 Planowane scenariusze
+# \### Active Directory Account Lockout Detection
 
-### 1. Nieudane logowanie do domeny
+# 
 
-Wygenerowanie nieudanych prób logowania do konta domenowego oraz analiza powstałych zdarzeń.
+# ``` text
 
-Zakres testu:
+# Windows Security Log
 
-- Windows Security Event Log,
-- Event ID związany z nieudanym logowaniem,
-- analiza alertu w Wazuh,
-- identyfikacja użytkownika oraz źródła logowania,
-- utworzenie własnej reguły detekcyjnej.
+# &#x20;       ↓
 
----
+# Active Directory
 
-### 2. Utworzenie użytkownika Active Directory
+# &#x20;       ↓
 
-Utworzenie testowego konta domenowego i analiza zdarzenia w Wazuh.
+# Wazuh
 
-Zakres testu:
+# &#x20;       ↓
 
-- utworzenie konta użytkownika,
-- Event Viewer,
-- analiza Event ID,
-- analiza Rule ID w Wazuh.
+# n8n
 
----
+# &#x20;       ↓
 
-### 3. Usunięcie użytkownika Active Directory
+# Ollama
 
-Monitorowanie usunięcia konta użytkownika z Active Directory.
+# &#x20;       ↓
 
----
+# SMTP
 
-### 4. Zmiana członkostwa w grupach
+# ```
 
-Dodanie oraz usunięcie użytkownika z grupy Active Directory.
+# 
 
----
+# W scenariuszu zostały wykorzystane m.in.:
 
-### 5. Dodanie użytkownika do grupy uprzywilejowanej
+# 
 
-Monitorowanie zmian w grupach o podwyższonych uprawnieniach, między innymi:
+# \-   Windows Event ID `4625` --- nieudane logowanie,
 
-- Domain Admins,
-- Administrators,
-- Enterprise Admins.
+# \-   Windows Event ID `4740` --- blokada konta,
 
----
+# \-   Wazuh Rule ID `60115`,
 
-### 6. Monitoring PowerShell
+# \-   Wazuh SCA / CIS,
 
-Rejestrowanie oraz analiza aktywności PowerShell.
+# \-   webhook Wazuh → n8n,
 
-Planowane elementy:
+# \-   normalizacja i filtrowanie danych w n8n,
 
-- PowerShell Operational Log,
-- Script Block Logging,
-- analiza wykonywanych poleceń,
-- wykrywanie nietypowej aktywności.
+# \-   lokalny model Ollama do pomocniczej analizy alertu,
 
----
+# \-   SMTP do wysłania powiadomienia administratorowi.
 
-### 7. File Integrity Monitoring
+# 
 
-Monitoring zmian w wybranym katalogu testowym.
+# Zależność `4625 → 4740` została potwierdzona na podstawie zdarzeń z
 
-Testowane operacje:
+# `LAB-W11-1` oraz `LAB-DC1`. Automatyczne łączenie obu typów zdarzeń
 
-- utworzenie pliku,
-- modyfikacja pliku,
-- zmiana nazwy,
-- usunięcie pliku.
+# pozostaje możliwym dalszym rozszerzeniem projektu.
 
-Przykładowy katalog:
+# 
 
-```text
-C:\Wazuh-Test
-```
+# ➡️ \*\*\[Pełna dokumentacja
 
----
+# projektu](docs/05-ad-account-lockout-detection.md)\*\*
 
-### 8. Zatrzymanie agenta Wazuh
+# 
 
-Test wykrywania sytuacji, w której agent Wazuh przestaje komunikować się z serwerem.
+# \------------------------------------------------------------------------
 
----
+# 
 
-### 9. Microsoft Defender
+# \## 🖥️ Środowisko LAB
 
-Analiza zdarzeń generowanych przez Microsoft Defender.
+# 
 
-Planowane testy:
+# &#x20; -----------------------------------------------------------------------
 
-- wykrycie testowego zagrożenia,
-- analiza zdarzenia,
-- korelacja z alertem Wazuh.
+# &#x20; Host                    System                  Rola
 
----
+# &#x20; ----------------------- ----------------------- -----------------------
 
-### 10. Własne reguły Wazuh
+# &#x20; `WAZUH-SRV`             Ubuntu Server           Wazuh Manager
 
-Tworzenie reguł dopasowanych do wybranych zdarzeń Windows i Active Directory.
+# 
 
-Zakres:
+# &#x20; `LAB-DC1`               Windows Server 2025     Active Directory /
 
-- `rule.id`,
-- `rule.level`,
-- `rule.description`,
-- `eventID`,
-- filtrowanie alertów,
-- ograniczanie niepotrzebnego szumu.
+# &#x20;                                                 Domain Controller
 
----
+# 
 
-## 🔍 Schemat analizy zdarzenia
+# &#x20; `LAB-W11-1`             Windows 11              Stacja robocza w
 
-Każdy scenariusz będzie analizowany według podobnego schematu:
+# &#x20;                                                 domenie
 
-```text
-Akcja testowa
-     ↓
-Windows Event Log
-     ↓
-Wazuh Agent
-     ↓
-Wazuh Manager
-     ↓
-Alert
-     ↓
-Analiza Event ID
-     ↓
-Analiza Rule ID
-     ↓
-Własna reguła lub konfiguracja
-     ↓
-Ponowny test
-     ↓
-Dokumentacja wyniku
-```
+# 
 
-Celem jest zrozumienie całej ścieżki zdarzenia, a nie tylko uzyskanie gotowego alertu.
+# &#x20; `LAB-W11-2`             Windows 11              Stacja robocza w
 
----
+# &#x20;                                                 domenie
 
-## 🔎 Analizowane pola
+# 
 
-Podczas pracy z alertami szczególna uwaga będzie zwracana na pola:
+# &#x20; `N8N-SRV`               Ubuntu Server / Docker  n8n / automatyzacje
 
-```text
-rule.id
-rule.level
-rule.description
-agent.name
-data.win.system.eventID
-data.win.eventdata.targetUserName
-data.win.eventdata.subjectUserName
-```
+# &#x20; -----------------------------------------------------------------------
 
-W zależności od typu zdarzenia analizowane będą również inne pola dostępne w logach Windows.
+# 
 
----
+# Hosty Windows posiadają agentów Wazuh i przekazują zdarzenia do
 
-## 📁 Struktura projektu
+# centralnego Wazuh Managera.
 
-```text
-wazuh/
-├── README.md
-├── docs/
-├── configs/
-├── scripts/
-└── screenshots/
-    ├── agents/
-    ├── architecture/
-    └── detections/
-```
+# 
 
-### `docs`
+# \------------------------------------------------------------------------
 
-Dokumentacja poszczególnych scenariuszy oraz konfiguracji.
+# 
 
-Planowana struktura:
+# \## 🧰 Technologie
 
-```text
-docs/
-├── 01-architecture.md
-├── 02-agent-deployment.md
-├── 03-windows-auditing.md
-├── 04-failed-domain-logon.md
-├── 05-ad-user-monitoring.md
-├── 06-privileged-groups.md
-├── 07-powershell-monitoring.md
-└── 08-file-integrity-monitoring.md
-```
+# 
 
-### `configs`
+# ``` text
 
-Przykładowe konfiguracje używane w środowisku.
+# Windows Server 2025
 
-Planowane pliki:
+# Active Directory
 
-```text
-configs/
-├── local_rules.xml
-└── ossec.conf.example
-```
+# Group Policy
 
-Wrażliwe dane, hasła, klucze oraz dane produkcyjne nie będą umieszczane w repozytorium.
+# Windows 11
 
-### `scripts`
+# Windows Security Event Log
 
-Skrypty PowerShell wykorzystywane do generowania kontrolowanych zdarzeń testowych.
+# Wazuh
 
-Przykładowo:
+# Wazuh SCA
 
-```text
-scripts/
-├── failed-logon-test.ps1
-├── create-test-user.ps1
-└── fim-test.ps1
-```
+# n8n
 
-### `screenshots`
+# Ollama
 
-Zrzuty ekranu dokumentujące konfigurację oraz wyniki testów.
+# SMTP
 
----
+# PowerShell
 
-## ✅ Aktualny stan projektu
+# Linux / Ubuntu
 
-- [x] Wazuh Manager zainstalowany
-- [x] LAB-DC1 podłączony do Wazuh
-- [x] LAB-W11-1 podłączony do Wazuh
-- [x] LAB-W11-2 podłączony do Wazuh
-- [ ] Dokumentacja architektury
-- [ ] Konfiguracja Windows Audit Policy
-- [ ] Test nieudanych logowań
-- [ ] Monitoring tworzenia użytkowników Active Directory
-- [ ] Monitoring usuwania użytkowników Active Directory
-- [ ] Monitoring zmian członkostwa w grupach
-- [ ] Monitoring grup uprzywilejowanych
-- [ ] Monitoring PowerShell
-- [ ] File Integrity Monitoring
-- [ ] Monitoring Microsoft Defender
-- [ ] Własne reguły Wazuh
-- [ ] Powiadomienia o wybranych zdarzeniach
-- [ ] Dokumentacja wyników testów
+# Docker
 
----
+# Git / GitHub
 
-## 🚧 Aktualny etap
+# ```
 
-Pierwszym pełnym scenariuszem projektu będzie:
+# 
 
-**Wykrywanie nieudanych prób logowania do domeny Active Directory.**
+# \------------------------------------------------------------------------
 
-Test obejmie:
+# 
 
-1. konfigurację audytu Windows,
-2. wygenerowanie zdarzenia,
-3. sprawdzenie zdarzenia w Event Viewer,
-4. odnalezienie zdarzenia w Wazuh,
-5. analizę Event ID,
-6. analizę Rule ID,
-7. przygotowanie własnej reguły,
-8. ponowne wykonanie testu,
-9. wykonanie zrzutów ekranu,
-10. opisanie wyniku w dokumentacji.
+# \## 📚 Dokumentacja
 
----
+# 
 
-## 📌 Założenia
+# &#x20; -------------------------------------------------------------------------------------------------------------------------
 
-Projekt wykonywany jest wyłącznie w izolowanym środowisku laboratoryjnym.
+# &#x20; Dokument                                                                              Zakres
 
-W repozytorium nie są publikowane:
+# &#x20; ------------------------------------------------------------------------------------- -----------------------------------
 
-- hasła,
-- klucze agentów,
-- tokeny API,
-- dane produkcyjne,
-- dane użytkowników,
-- konfiguracje zawierające dane dostępowe.
+# &#x20; \[`01-architecture.md`](docs/01-architecture.md)                                       Architektura środowiska
 
-Celem projektu jest praktyczna nauka administracji, monitoringu bezpieczeństwa i analizy zdarzeń w kontrolowanym środowisku testowym.
+# 
+
+# &#x20; \[`02-failed-logon-default-rule.md`](docs/02-failed-logon-default-rule.md)             Nieudane logowanie i domyślna
+
+# &#x20;                                                                                       detekcja Wazuh
+
+# 
+
+# &#x20; \[`03-custom-rule-119100.md`](docs/03-custom-rule-119100.md)                           Własna reguła Wazuh
+
+# 
+
+# &#x20; \[`04-n8n-smtp-integration.md`](docs/04-n8n-smtp-integration.md)                       Integracja Wazuh → n8n → SMTP
+
+# 
+
+# &#x20; \*\*\[`05-ad-account-lockout-detection.md`](docs/05-ad-account-lockout-detection.md)\*\*   \*\*AD Account Lockout → Wazuh → n8n
+
+# &#x20;                                                                                       → Ollama → SMTP\*\*
+
+# &#x20; -------------------------------------------------------------------------------------------------------------------------
+
+# 
+
+# > Dokument `05` jest obecnie najbardziej rozbudowanym, kompletnym
+
+# > scenariuszem w tym repozytorium.
+
+# 
+
+# \------------------------------------------------------------------------
+
+# 
+
+# \## 🔎 Jak analizuję zdarzenia
+
+# 
+
+# Każdy scenariusz staram się przeprowadzać według podobnego schematu:
+
+# 
+
+# ``` text
+
+# Akcja testowa
+
+# &#x20;     ↓
+
+# Windows Event Log
+
+# &#x20;     ↓
+
+# Wazuh Agent
+
+# &#x20;     ↓
+
+# Wazuh Manager
+
+# &#x20;     ↓
+
+# Analiza Event ID / Rule ID
+
+# &#x20;     ↓
+
+# Reguła lub filtr
+
+# &#x20;     ↓
+
+# Automatyzacja
+
+# &#x20;     ↓
+
+# Powiadomienie
+
+# &#x20;     ↓
+
+# Dokumentacja i ponowny test
+
+# ```
+
+# 
+
+# Celem jest zrozumienie \*\*dlaczego alert powstał, z jakiego zdarzenia
+
+# pochodzi i jakie dane są rzeczywiście przydatne administratorowi\*\*, a
+
+# nie samo uzyskanie alertu w dashboardzie.
+
+# 
+
+# \------------------------------------------------------------------------
+
+# 
+
+# \## 🔍 Analizowane dane
+
+# 
+
+# W zależności od scenariusza analizuję m.in.:
+
+# 
+
+# ``` text
+
+# rule.id
+
+# rule.level
+
+# rule.description
+
+# agent.name
+
+# agent.ip
+
+# data.win.system.eventID
+
+# data.win.eventdata.targetUserName
+
+# data.win.eventdata.subjectUserName
+
+# data.win.eventdata.workstationName
+
+# data.win.eventdata.logonType
+
+# ```
+
+# 
+
+# Zakres pól zależy od konkretnego Windows Event ID.
+
+# 
+
+# \------------------------------------------------------------------------
+
+# 
+
+# \## ✅ Zrealizowane elementy
+
+# 
+
+# \-   \[x] Wazuh Manager
+
+# \-   \[x] Agenty Windows i Linux
+
+# \-   \[x] Monitoring kontrolera domeny
+
+# \-   \[x] Monitoring stacji Windows 11
+
+# \-   \[x] Windows Audit Policy dla testowanych zdarzeń
+
+# \-   \[x] Detekcja nieudanych logowań --- Event ID `4625`
+
+# \-   \[x] Własna reguła Wazuh dla wybranego scenariusza
+
+# \-   \[x] Integracja Wazuh → n8n
+
+# \-   \[x] Powiadomienia SMTP
+
+# \-   \[x] Monitoring utworzenia i usunięcia użytkownika AD
+
+# \-   \[x] Detekcja blokady konta --- Event ID `4740`
+
+# \-   \[x] Wazuh Rule ID `60115`
+
+# \-   \[x] Test Account Lockout Policy
+
+# \-   \[x] Wazuh SCA / CIS dla Account Lockout Threshold
+
+# \-   \[x] Potwierdzenie zależności `4625 → 4740`
+
+# \-   \[x] Lokalna analiza alertu przez Ollama
+
+# \-   \[x] Finalny workflow `Wazuh → n8n → Ollama → SMTP`
+
+# 
+
+# \------------------------------------------------------------------------
+
+# 
+
+# \## 🧪 Kolejne scenariusze
+
+# 
+
+# Repozytorium będzie rozwijane o kolejne kontrolowane testy
+
+# bezpieczeństwa, m.in.:
+
+# 
+
+# \-   zmiany członkostwa w grupach Active Directory,
+
+# \-   zmiany w grupach uprzywilejowanych,
+
+# \-   monitoring PowerShell,
+
+# \-   File Integrity Monitoring,
+
+# \-   zdarzenia Microsoft Defender,
+
+# \-   wybrane scenariusze Active Response,
+
+# \-   dalszą korelację zdarzeń Windows i Active Directory.
+
+# 
+
+# Jednym z możliwych rozszerzeń obecnego projektu jest automatyczna
+
+# korelacja wcześniejszych zdarzeń `4625` z późniejszym `4740` i
+
+# przekazanie pełnego kontekstu incydentu do n8n/Ollama.
+
+# 
+
+# \------------------------------------------------------------------------
+
+# 
+
+# \## 📁 Struktura repozytorium
+
+# 
+
+# ``` text
+
+# wazuh/
+
+# ├── README.md
+
+# ├── docs/
+
+# │   ├── 01-architecture.md
+
+# │   ├── 02-failed-logon-default-rule.md
+
+# │   ├── 03-custom-rule-119100.md
+
+# │   ├── 04-n8n-smtp-integration.md
+
+# │   └── 05-ad-account-lockout-detection.md
+
+# ├── configs/
+
+# ├── scripts/
+
+# └── screenshots/
+
+# ```
+
+# 
+
+# \### `docs/`
+
+# 
+
+# Dokumentacja konfiguracji, testów i wyników poszczególnych scenariuszy.
+
+# 
+
+# \### `configs/`
+
+# 
+
+# Przykładowe konfiguracje Wazuh wykorzystywane w LAB.
+
+# 
+
+# \### `scripts/`
+
+# 
+
+# Skrypty i narzędzia używane do generowania kontrolowanych zdarzeń oraz
+
+# testów.
+
+# 
+
+# \### `screenshots/`
+
+# 
+
+# Zrzuty z Windows Event Viewer, Wazuh, n8n oraz finalnych powiadomień
+
+# dokumentujące przebieg testów.
+
+# 
+
+# \------------------------------------------------------------------------
+
+# 
+
+# \## 🔒 Bezpieczeństwo repozytorium
+
+# 
+
+# Projekt wykonywany jest wyłącznie w kontrolowanym środowisku
+
+# laboratoryjnym.
+
+# 
+
+# W repozytorium nie publikuję:
+
+# 
+
+# \-   haseł,
+
+# \-   kluczy agentów,
+
+# \-   tokenów API,
+
+# \-   danych dostępowych,
+
+# \-   danych produkcyjnych,
+
+# \-   konfiguracji zawierających sekrety.
+
+# 
+
+# Dane użytkowników, hostów i domen wykorzystywane w scenariuszach są
+
+# elementami środowiska LAB.
+
+# 
+
+# \------------------------------------------------------------------------
+
+# 
+
+# \## 🎯 Cel repozytorium
+
+# 
+
+# Repozytorium dokumentuje mój praktyczny rozwój w obszarze:
+
+# 
+
+# \*\*Windows Administration → Active Directory → Security Monitoring → SIEM
+
+# → Automation\*\*
+
+# 
+
+# Każdy scenariusz ma być możliwie praktyczny, powtarzalny i
+
+# udokumentowany tak, aby pokazywał zarówno konfigurację, jak i sposób
+
+# analizy zdarzenia.
+
+
+
