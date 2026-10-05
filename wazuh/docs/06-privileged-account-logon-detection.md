@@ -31,7 +31,7 @@ n8n
 jeden skorelowany alert SMTP
 ```
 
-Projekt jest wykonywany w środowisku LAB i służy do nauki analizy zdarzeń Windows, Sysmon, korelacji, Detection Engineering oraz automatyzacji obsługi alertów.
+Projekt jest wykonywany w środowisku LAB i służy do nauki analizy zdarzeń Windows, Sysmon, PowerShell Script Block Logging, korelacji, Detection Engineering oraz automatyzacji obsługi alertów.
 
 ---
 
@@ -45,6 +45,7 @@ Projekt jest wykonywany w środowisku LAB i służy do nauki analizy zdarzeń Wi
 | Wazuh Agent | zbieranie logów ze stacji |
 | Wazuh Manager | analiza zdarzeń i własne reguły |
 | Sysmon | telemetria procesów |
+| PowerShell Script Block Logging | zapis wykonywanego kodu PowerShell |
 
 ---
 
@@ -105,8 +106,6 @@ Zdarzenie potwierdza przypisanie do sesji specjalnych uprawnień.
 
 ## Korelacja 4624 → 4672 po Logon ID
 
-Kluczową obserwacją jest możliwość powiązania obu zdarzeń.
-
 W `4624`:
 
 ```text
@@ -129,15 +128,11 @@ Linked Logon ID: 0x38BD57
 Logon ID: 0x38BD57
 ```
 
-Dzięki temu można potwierdzić, że konkretna sesja logowania jest powiązana z sesją, której Windows przypisał specjalne uprawnienia.
-
 ---
 
 # Windows → Wazuh
 
-Kolejnym krokiem było sprawdzenie, czy Wazuh odbiera ten sam Event ID `4672` bez utraty najważniejszych informacji.
-
-W Wazuh widoczne są:
+Wazuh odebrał ten sam Event ID `4672` wraz z kluczowym kontekstem:
 
 ```text
 agent.name = LAB-W11-1
@@ -149,14 +144,7 @@ subjectLogonId = 0x38bd57
 
 ![Wazuh Event ID 4672](../screenshots/03-wazuh-4672-logon-id.png)
 
-To ten sam identyfikator sesji, który był widoczny lokalnie w Event Viewer:
-
-```text
-Windows: 0x38BD57
-Wazuh:   0x38bd57
-```
-
-Wazuh przypisał zdarzenie do domyślnej reguły:
+Domyślna klasyfikacja Wazuh:
 
 ```text
 Rule ID: 67028
@@ -166,45 +154,30 @@ Description: Special privileges assigned to new logon.
 
 ![Wazuh Rule 67028](../screenshots/04-wazuh-4672-rule-details.png)
 
----
+## Co potwierdzono w Etapie 1
 
-# Co potwierdzono w Etapie 1
-
-- [x] konto testowe `adm-ctworzewski` istnieje,
 - [x] Windows generuje `4624`,
 - [x] Windows generuje `4672`,
 - [x] możliwa jest korelacja po `Logon ID`,
 - [x] Wazuh odbiera `4672`,
 - [x] Wazuh zachowuje użytkownika, domenę i `Logon ID`,
-- [x] domyślna reguła Wazuh `67028` poprawnie klasyfikuje `4672`.
+- [x] domyślna reguła `67028` poprawnie klasyfikuje zdarzenie.
 
 ---
 
 # Etap 2 – Sysmon i uruchomienie PowerShell
 
-Drugim etapem projektu jest rozszerzenie telemetrii o Sysmon i sprawdzenie, czy po użyciu konta uprzywilejowanego można wykryć uruchomienie PowerShell.
+Drugim etapem jest rozszerzenie telemetrii o Sysmon i sprawdzenie, czy po użyciu konta uprzywilejowanego można wykryć uruchomienie PowerShell.
 
-Interesuje nas przede wszystkim:
+Najważniejsze zdarzenie:
 
 ```text
 Sysmon Event ID 1 – Process Create
 ```
 
-Dzięki temu zdarzeniu można uzyskać m.in.:
-
-- ścieżkę procesu,
-- `CommandLine`,
-- użytkownika,
-- `ProcessId`,
-- `ProcessGuid`,
-- `LogonId`,
-- `IntegrityLevel`,
-- informacje o procesie nadrzędnym,
-- hash procesu.
-
 ## Sysmon – lokalny Event ID 1
 
-Po uruchomieniu PowerShell jako konto:
+Po uruchomieniu PowerShell przez:
 
 ```text
 CYBER\adm-ctworzewski
@@ -221,15 +194,11 @@ LogonId: 0x950c3
 IntegrityLevel: High
 ```
 
-`IntegrityLevel: High` potwierdza, że proces został uruchomiony w kontekście podwyższonych uprawnień.
-
 ![Windows Sysmon Event ID 1](../screenshots/05-windows-sysmon-event1-powershell.png)
-
----
 
 ## Sysmon → Wazuh
 
-Do konfiguracji agenta Wazuh na `LAB-W11-1` dodano kanał Sysmon:
+Do konfiguracji agenta Wazuh dodano kanał:
 
 ```xml
 <localfile>
@@ -238,15 +207,7 @@ Do konfiguracji agenta Wazuh na `LAB-W11-1` dodano kanał Sysmon:
 </localfile>
 ```
 
-Po restarcie usługi agenta:
-
-```powershell
-Restart-Service WazuhSvc
-```
-
-Wazuh zaczął odbierać zdarzenia Sysmon.
-
-Dla tego samego uruchomienia PowerShell widoczne są m.in.:
+Po restarcie agenta Wazuh odebrał ten sam proces:
 
 ```text
 agent.name = LAB-W11-1
@@ -256,9 +217,9 @@ logonId = 0x950c3
 integrityLevel = High
 ```
 
-![Wazuh Sysmon Event ID 1 – details](../screenshots/06-wazuh-sysmon-event1-powershell-details.png)
+![Wazuh Sysmon Event ID 1](../screenshots/06-wazuh-sysmon-event1-powershell-details.png)
 
-Na poziomie reguły Wazuh zdarzenie zostało sklasyfikowane jako:
+Zdarzenie zostało sklasyfikowane przez:
 
 ```text
 Rule ID: 100100
@@ -266,42 +227,9 @@ Level: 3
 Description: Sysmon - Event 1: Process creation Windows PowerShell
 ```
 
-![Wazuh Sysmon rule details](../screenshots/07-wazuh-sysmon-event1-rule-details.png)
+![Wazuh Sysmon Rule 100100](../screenshots/07-wazuh-sysmon-event1-rule-details.png)
 
----
-
-## Korelacja Windows Sysmon → Wazuh
-
-Dla obu stron widoczny jest ten sam proces:
-
-```text
-PowerShell.exe
-ProcessId: 9900
-LogonId: 0x950c3
-IntegrityLevel: High
-```
-
-Daje to czytelny przepływ:
-
-```text
-CYBER\adm-ctworzewski
-        ↓
-powershell.exe
-        ↓
-Sysmon Event ID 1
-        ↓
-ProcessId 9900 / LogonId 0x950c3
-        ↓
-Wazuh
-        ↓
-Rule 100100
-```
-
-To potwierdza, że Wazuh nie tylko odbiera Sysmon, ale zachowuje kontekst potrzebny do dalszej korelacji.
-
----
-
-# Co potwierdzono w Etapie 2
+## Co potwierdzono w Etapie 2
 
 - [x] Sysmon działa na `LAB-W11-1`,
 - [x] Sysmon generuje Event ID `1`,
@@ -315,73 +243,170 @@ To potwierdza, że Wazuh nie tylko odbiera Sysmon, ale zachowuje kontekst potrze
 
 ---
 
-# Dlaczego Sysmon jest ważny w tym projekcie
+# Etap 3 – PowerShell Script Block Logging
 
-Windows Security Log pozwala odpowiedzieć na pytanie:
+Sysmon pokazuje, że uruchomiono proces PowerShell, ale nie daje pełnego obrazu tego, **co zostało wykonane wewnątrz PowerShell**.
 
-> **kto się zalogował?**
-
-Sysmon rozszerza ten kontekst o:
-
-> **co użytkownik uruchomił?**
-
-Dzięki temu zamiast pojedynczego alertu o logowaniu możemy budować sekwencję:
+Dlatego w kolejnym kroku włączono:
 
 ```text
-konto uprzywilejowane
-        ↓
-logowanie
-        ↓
-PowerShell
+Turn on PowerShell Script Block Logging
 ```
 
-Samo uruchomienie PowerShell nie oznacza incydentu. Jest to jednak istotny element kontekstu, szczególnie gdy występuje bezpośrednio po logowaniu konta administracyjnego.
+## Włączenie polityki
+
+W `gpedit.msc`:
+
+```text
+Computer Configuration
+→ Administrative Templates
+→ Windows Components
+→ Windows PowerShell
+→ Turn on PowerShell Script Block Logging
+→ Enabled
+```
+
+Następnie wymuszono politykę:
+
+```powershell
+gpupdate /force
+```
+
+![PowerShell Script Block Logging enabled](../screenshots/08-powershell-script-block-logging-enabled.png)
+
+## Test – Get-LocalUser
+
+Po wykonaniu:
+
+```powershell
+Get-LocalUser
+```
+
+Windows zapisał:
+
+```text
+Event ID: 4104
+User: CYBER\adm-ctworzewski
+ScriptBlockText: Get-LocalUser
+ScriptBlock ID: ed11f023-d47c-4ce8-a9ff-d7c823104aec
+```
+
+![Windows PowerShell 4104](../screenshots/09-windows-powershell-4104-get-localuser.png)
+
+## PowerShell 4104 → Wazuh
+
+Do agenta Wazuh dodano kanał:
+
+```xml
+<localfile>
+  <location>Microsoft-Windows-PowerShell/Operational</location>
+  <log_format>eventchannel</log_format>
+</localfile>
+```
+
+Po restarcie agenta Wazuh poprawnie odebrał Event ID `4104`.
+
+Widoczne pola:
+
+```text
+agent.name = LAB-W11-1
+eventID = 4104
+channel = Microsoft-Windows-PowerShell/Operational
+scriptBlockText = Get-LocalUser
+scriptBlockId = ed11f023-d47c-4ce8-a9ff-d7c823104aec
+```
+
+![Wazuh PowerShell 4104 details](../screenshots/10-wazuh-powershell-4104-get-localuser-details.png)
+
+Najważniejsze jest to, że po obu stronach widoczny jest ten sam:
+
+```text
+ScriptBlock ID:
+ed11f023-d47c-4ce8-a9ff-d7c823104aec
+```
+
+czyli możemy jednoznacznie powiązać lokalny wpis Windows z dokumentem odebranym przez Wazuh.
+
+## Reguła i MITRE ATT&CK
+
+Wazuh sklasyfikował wykonanie `Get-LocalUser` jako:
+
+```text
+Rule ID: 100541
+Level: 3
+Description: Powershell script Get-LocalUser Executed
+MITRE: T1087.002
+Tactic: Discovery
+Technique: Domain Account
+```
+
+![Wazuh PowerShell Rule / MITRE](../screenshots/11-wazuh-powershell-4104-rule-mitre.png)
+
+## Co potwierdzono w Etapie 3
+
+- [x] Script Block Logging został włączony,
+- [x] polityka została zastosowana przez `gpupdate /force`,
+- [x] Windows generuje Event ID `4104`,
+- [x] `4104` zawiera `scriptBlockText`,
+- [x] `4104` zawiera `ScriptBlock ID`,
+- [x] Wazuh odbiera `Microsoft-Windows-PowerShell/Operational`,
+- [x] Wazuh zachowuje `scriptBlockText`,
+- [x] Windows i Wazuh można powiązać po `ScriptBlock ID`,
+- [x] Wazuh klasyfikuje `Get-LocalUser` regułą `100541`,
+- [x] Wazuh przypisuje mapowanie MITRE ATT&CK `T1087.002`.
+
+---
+
+# Dlaczego ten etap ma znaczenie
+
+Na tym etapie mamy już trzy różne warstwy widoczności:
+
+```text
+Windows Security
+→ kto się zalogował?
+
+Sysmon
+→ jaki proces został uruchomiony?
+
+PowerShell 4104
+→ co zostało wykonane wewnątrz PowerShell?
+```
+
+Dzięki temu można zbudować znacznie bardziej wartościową sekwencję:
+
+```text
+adm-ctworzewski
+        ↓
+logowanie konta uprzywilejowanego
+        ↓
+powershell.exe
+        ↓
+Get-LocalUser
+```
+
+Samo `Get-LocalUser` nie oznacza ataku. Może być normalną czynnością administracyjną. W projekcie chodzi o uzyskanie **pełnego kontekstu**, który później pozwoli zbudować własną detekcję i korelację.
 
 ---
 
 # Następny etap
 
-## Etap 3 – PowerShell Script Block Logging
+## Etap 4 – własne reguły Wazuh
 
-Sysmon pokazuje, że uruchomiono:
-
-```text
-powershell.exe
-```
-
-ale nie zawsze daje pełną odpowiedź na pytanie:
-
-> **co dokładnie zostało wykonane wewnątrz PowerShell?**
-
-Dlatego kolejnym etapem będzie włączenie:
+Kolejnym krokiem będzie utworzenie własnych reguł:
 
 ```text
-PowerShell Script Block Logging
+100200 → wykrycie logowania konta uprzywilejowanego
+100201 → wykrycie uruchomienia PowerShell
+100203 → wykrycie wykonanego ScriptBlock
 ```
 
-i analiza:
-
-```text
-Event ID 4104
-```
-
-Docelowo chcemy uzyskać:
-
-```text
-Privileged Account Logon
-        ↓
-PowerShell Process
-        ↓
-ScriptBlockText
-        ↓
-konkretne wykonane polecenie
-```
+Następnie te trzy źródła zostaną wykorzystane do dalszej korelacji i automatyzacji w n8n.
 
 ---
 
 # Status projektu
 
-✅ **Etap 1 – Windows Security / Wazuh zakończony**
+✅ **Etap 1 – Windows Security / Wazuh**
 
 ```text
 4624
@@ -393,10 +418,10 @@ korelacja po Logon ID
 Wazuh Rule 67028
 ```
 
-✅ **Etap 2 – Sysmon / PowerShell zakończony**
+✅ **Etap 2 – Sysmon / PowerShell**
 
 ```text
-PowerShell
+powershell.exe
 ↓
 Sysmon Event ID 1
 ↓
@@ -405,4 +430,18 @@ ProcessId / LogonId / IntegrityLevel
 Wazuh Rule 100100
 ```
 
-🚧 **Następny krok: PowerShell Script Block Logging / Event ID 4104**
+✅ **Etap 3 – PowerShell Script Block Logging**
+
+```text
+Get-LocalUser
+↓
+Event ID 4104
+↓
+ScriptBlockText / ScriptBlock ID
+↓
+Wazuh Rule 100541
+↓
+MITRE T1087.002
+```
+
+🚧 **Następny krok: własne reguły Wazuh `100200 / 100201 / 100203`**
