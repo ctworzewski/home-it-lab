@@ -2,335 +2,247 @@
 
 ## Cel projektu
 
-Celem projektu jest wykrywanie i analiza logowań na konta uprzywilejowane w środowisku Active Directory oraz monitorowanie aktywności wykonywanej po zalogowaniu.
+Celem projektu jest zbudowanie wieloetapowej detekcji aktywności konta uprzywilejowanego w środowisku Active Directory.
 
-Projekt ma odpowiedzieć nie tylko na pytanie:
+Projekt ma docelowo odpowiedzieć na pytania:
 
-> **Kto i skąd zalogował się na konto uprzywilejowane?**
+1. **Czy konto uprzywilejowane zostało użyte do logowania?**
+2. **Czy po logowaniu uruchomiono PowerShell?**
+3. **Jakie polecenia lub skrypty zostały wykonane?**
+4. **Czy kilka niezależnych zdarzeń można połączyć w jeden czytelny incydent?**
 
-ale również:
-
-> **Co użytkownik zrobił po zalogowaniu i czy jego aktywność wymaga dodatkowej weryfikacji?**
-
-Projekt jest kolejnym krokiem po prostych detekcjach opartych o pojedyncze Event ID. Jego głównym celem jest nauka korelacji kilku źródeł logów, budowania własnych reguł detekcji oraz automatycznej reakcji na wybrane zdarzenia.
-
----
-
-## Zakres projektu
-
-Projekt obejmuje:
-
-- wykrywanie logowań na konta uprzywilejowane,
-- analizę zdarzeń Windows Security,
-- monitoring procesów za pomocą Sysmon,
-- monitoring wykonywanego kodu PowerShell,
-- korelację zdarzeń w Wazuh,
-- wzbogacanie alertów o dodatkowy kontekst,
-- integrację z n8n,
-- powiadomienia e-mail,
-- test mechanizmu Wazuh Active Response.
-
----
-
-## Etap 1 – Logowanie na konto uprzywilejowane
-
-Podstawą projektu będzie analiza zdarzeń:
-
-- Event ID `4624` – udane logowanie,
-- Event ID `4672` – specjalne uprawnienia przypisane do nowej sesji,
-- Event ID `4625` – nieudane logowanie.
-
-Wazuh powinien zebrać i zaprezentować m.in.:
-
-- użytkownika,
-- domenę,
-- host,
-- źródłowy adres IP,
-- nazwę stacji źródłowej,
-- typ logowania,
-- czas zdarzenia.
-
-### Przykładowy scenariusz
+Docelowy przepływ:
 
 ```text
-Użytkownik uprzywilejowany
+Privileged Account Logon
         ↓
-Udane logowanie
-        ↓
-Windows Event ID 4624
-        ↓
-Windows Event ID 4672
+Windows Security 4624 / 4672
         ↓
 Wazuh
         ↓
-Alert bezpieczeństwa
-```
-
----
-
-## Etap 2 – Sysmon
-
-Po wykryciu logowania na konto uprzywilejowane projekt zostanie rozszerzony o monitoring aktywności wykonywanej po zalogowaniu.
-
-Do tego celu zostanie wykorzystany Sysmon.
-
-Na początek monitorowane będą przede wszystkim:
-
-- Event ID `1` – Process Create,
-- Event ID `3` – Network Connection.
-
-Najważniejszym elementem będzie wykrywanie uruchomienia procesów takich jak:
-
-- `powershell.exe`,
-- `pwsh.exe`,
-- `cmd.exe`.
-
-### Informacje analizowane z Sysmon
-
-- użytkownik,
-- nazwa procesu,
-- ścieżka procesu,
-- proces nadrzędny,
-- CommandLine,
-- Process ID,
-- Parent Process ID,
-- adres docelowy,
-- port docelowy.
-
-### Przykładowy scenariusz
-
-```text
-4624 / 4672
+Sysmon – Process Create
         ↓
-Logowanie konta uprzywilejowanego
+PowerShell Script Block Logging – 4104
         ↓
-Sysmon Event ID 1
-        ↓
-powershell.exe
-        ↓
-Analiza procesu i CommandLine
-```
-
----
-
-## Etap 3 – PowerShell Script Block Logging
-
-Sam fakt uruchomienia `powershell.exe` nie musi oznaczać podejrzanej aktywności.
-
-Dlatego projekt zostanie rozszerzony o PowerShell Script Block Logging.
-
-Najważniejsze zdarzenie:
-
-- Event ID `4104` – wykonany kod PowerShell.
-
-Pozwoli to analizować nie tylko uruchomienie procesu PowerShell, ale również wykonywane polecenia i fragmenty skryptów.
-
-### Planowany przepływ
-
-```text
-Logowanie konta uprzywilejowanego
-        ↓
-Sysmon Event ID 1
-        ↓
-powershell.exe
-        ↓
-PowerShell Event ID 4104
-        ↓
-Wazuh
-        ↓
-Korelacja zdarzeń
-```
-
----
-
-## Etap 4 – Korelacja w Wazuh
-
-Docelowo alert nie powinien być generowany wyłącznie na podstawie pojedynczego zdarzenia.
-
-Projekt ma umożliwić korelację kilku elementów, np.:
-
-```text
-Konto uprzywilejowane
-        +
-Udane logowanie
-        +
-Uruchomienie PowerShell
-        +
-Określone polecenie
-        =
-Alert o podwyższonym poziomie
-```
-
-Dodatkowo możliwa będzie analiza wcześniejszych zdarzeń `4625`, aby sprawdzić, czy przed poprawnym logowaniem występowały nieudane próby uwierzytelnienia.
-
----
-
-## Etap 5 – Integracja z n8n
-
-Po wykryciu zdarzenia Wazuh przekaże alert do n8n.
-
-n8n będzie odpowiedzialny za przygotowanie czytelnego powiadomienia zawierającego najważniejsze informacje o zdarzeniu.
-
-### Informacje w alercie
-
-| Pole | Opis |
-|---|---|
-| Host | komputer, na którym wykryto aktywność |
-| Użytkownik | konto uprzywilejowane |
-| Domena | domena Active Directory |
-| Event ID | zdarzenie Windows / Sysmon |
-| Rule ID | reguła Wazuh |
-| Logon Type | typ logowania |
-| Source IP | źródłowy adres IP |
-| Workstation | komputer źródłowy |
-| Process | uruchomiony proces |
-| Parent Process | proces nadrzędny |
-| CommandLine | linia poleceń |
-| Timestamp | czas zdarzenia |
-| Previous Failed Logons | wcześniejsze nieudane próby logowania |
-
----
-
-## Etap 6 – Wazuh Active Response
-
-Końcowym etapem projektu będzie wykorzystanie mechanizmu Wazuh Active Response.
-
-Active Response **nie będzie uruchamiany po samym wykryciu PowerShella**.
-
-Reakcja zostanie wykonana dopiero po spełnieniu określonych warunków, np.:
-
-- logowanie na konto uprzywilejowane,
-- uruchomienie PowerShell,
-- wykrycie określonego polecenia lub wzorca,
-- wygenerowanie przez Wazuh alertu o odpowiednio wysokim poziomie.
-
-### Active Response – etap 1
-
-Pierwszym testowanym scenariuszem będzie automatyczne zakończenie procesu PowerShell.
-
-Planowana reakcja:
-
-- identyfikacja procesu,
-- zapisanie PID,
-- zapisanie użytkownika,
-- zapisanie hosta,
-- zakończenie procesu `powershell.exe`,
-- zapisanie informacji o wykonanej reakcji,
-- przekazanie informacji do n8n,
-- wysłanie powiadomienia e-mail.
-
-### Active Response – etap 2
-
-Po poprawnym przetestowaniu pierwszej wersji projekt może zostać rozszerzony o czasową izolację hosta.
-
-Przykładowy scenariusz:
-
-- Wazuh wykrywa określone zachowanie,
-- Active Response uruchamia skrypt,
-- Windows Firewall ogranicza ruch sieciowy hosta,
-- pozostawiony zostaje dostęp wymagany do obsługi incydentu,
-- po określonym czasie host zostaje przywrócony do normalnego stanu.
-
-Ta część będzie wykonywana wyłącznie w środowisku LAB.
-
----
-
-## Docelowy przepływ projektu
-
-```text
-Active Directory
-        ↓
-4624 / 4672
-        ↓
-Logowanie konta uprzywilejowanego
-        ↓
-Sysmon Event ID 1
-        ↓
-PowerShell / CMD
-        ↓
-PowerShell Event ID 4104
-        ↓
-Wazuh
-        ↓
-Korelacja zdarzeń
-        ↓
-Własna reguła detekcji
-        ↓
-Active Response
-        ↓
-Zakończenie procesu / izolacja hosta
+własne reguły Wazuh
         ↓
 n8n
         ↓
-Powiadomienie e-mail
+jeden skorelowany alert SMTP
 ```
 
----
-
-## Checklista
-
-- [ ] Monitorowanie Event ID `4624`
-- [ ] Monitorowanie Event ID `4672`
-- [ ] Monitorowanie Event ID `4625`
-- [ ] Identyfikacja kont uprzywilejowanych
-- [ ] Pobranie użytkownika, domeny, hosta i Source IP
-- [ ] Analiza Logon Type
-- [ ] Instalacja i konfiguracja Sysmon
-- [ ] Monitoring Sysmon Event ID `1`
-- [ ] Monitoring Sysmon Event ID `3`
-- [ ] Monitoring `powershell.exe`, `pwsh.exe` i `cmd.exe`
-- [ ] Włączenie PowerShell Script Block Logging
-- [ ] Monitoring Event ID `4104`
-- [ ] Korelacja logowania z aktywnością procesu
-- [ ] Korelacja z wcześniejszymi zdarzeniami `4625`
-- [ ] Utworzenie własnej reguły Wazuh
-- [ ] Test scenariusza w środowisku LAB
-- [ ] Przekazanie alertu do n8n
-- [ ] Przygotowanie powiadomienia e-mail
-- [ ] Active Response – zakończenie procesu PowerShell
-- [ ] Active Response – test czasowej izolacji hosta
-- [ ] Dokumentacja wyników
-- [ ] Dodanie screenshotów z testów
+Projekt jest wykonywany w środowisku LAB i służy do nauki analizy zdarzeń Windows, korelacji, Detection Engineering oraz automatyzacji obsługi alertów.
 
 ---
 
-## Czego chcę się nauczyć
+## Środowisko LAB
 
-Projekt ma pozwolić mi rozwinąć umiejętności w zakresie:
-
-- analizy Windows Security Logs,
-- konfiguracji i analizy Sysmon,
-- analizy relacji Parent / Child Process,
-- analizy CommandLine,
-- PowerShell Script Block Logging,
-- korelacji kilku źródeł logów,
-- tworzenia własnych reguł Wazuh,
-- integracji Wazuh z n8n,
-- automatyzacji reakcji na incydenty,
-- wykorzystania Wazuh Active Response,
-- budowania praktycznych scenariuszy Detection Engineering / SOC.
+| Element | Rola |
+|---|---|
+| `LAB-DC1` | Active Directory / domena `cyber.local` |
+| `LAB-W11-1` | stacja testowa Windows 11 |
+| `CYBER\adm-ctworzewski` | testowe konto uprzywilejowane |
+| Wazuh Agent | zbieranie logów ze stacji |
+| Wazuh Manager | analiza zdarzeń i własne reguły |
 
 ---
 
-## Kryterium zakończenia projektu
+# Etap 1 – logowanie konta uprzywilejowanego
 
-Projekt zostanie uznany za zakończony, gdy:
+Pierwszym etapem projektu jest sprawdzenie, jakie zdarzenia generuje Windows podczas użycia konta uprzywilejowanego oraz czy ten sam kontekst jest widoczny w Wazuh.
 
-- Wazuh poprawnie wykryje logowanie na konto uprzywilejowane,
-- zostanie wykryte uruchomienie PowerShell lub CMD po zalogowaniu,
-- Sysmon poprawnie przekaże informacje o procesie,
-- PowerShell Script Block Logging dostarczy zdarzenia `4104`,
-- Wazuh skoreluje wybrane zdarzenia,
-- alert będzie zawierał najważniejszy kontekst dotyczący aktywności,
-- zdarzenie zostanie przekazane do n8n,
-- n8n wygeneruje czytelne powiadomienie e-mail,
-- Active Response zostanie poprawnie przetestowany w środowisku LAB,
-- cały scenariusz zostanie udokumentowany na GitHub.
+Analizowane zdarzenia:
+
+- **4624** – udane logowanie,
+- **4672** – przypisanie specjalnych uprawnień do nowej sesji.
+
+## Event ID 4624 – udane logowanie
+
+Po zalogowaniu konta:
+
+```text
+CYBER\adm-ctworzewski
+```
+
+Windows zarejestrował Event ID `4624`.
+
+Na potrzeby korelacji interesujące są przede wszystkim:
+
+- `Account Name`,
+- `Account Domain`,
+- `Logon Type`,
+- `Logon ID`,
+- `Linked Logon ID`.
+
+W badanym zdarzeniu:
+
+```text
+Account Name: adm-ctworzewski
+Domain: CYBER
+Logon Type: 7
+Logon ID: 0x38BF8E
+Linked Logon ID: 0x38BD57
+```
+
+> `Logon Type 7` oznacza odblokowanie istniejącej sesji. W dalszej części projektu ten typ będzie celowo wyłączony z właściwej detekcji logowania uprzywilejowanego.
+
+![Windows Event ID 4624](screenshots/01-windows-4624-linked-logon-id.png)
+
+## Event ID 4672 – specjalne uprawnienia
+
+W tej samej sekwencji Windows wygenerował Event ID `4672`:
+
+```text
+Account Name: adm-ctworzewski
+Domain: CYBER
+Logon ID: 0x38BD57
+```
+
+Zdarzenie potwierdza przypisanie do sesji specjalnych uprawnień, m.in.:
+
+```text
+SeSecurityPrivilege
+SeTakeOwnershipPrivilege
+SeLoadDriverPrivilege
+SeBackupPrivilege
+SeRestorePrivilege
+SeDebugPrivilege
+SeSystemEnvironmentPrivilege
+SeImpersonatePrivilege
+```
+
+![Windows Event ID 4672](screenshots/02-windows-4672-special-privileges.png)
+
+## Korelacja 4624 → 4672 po Logon ID
+
+Kluczową obserwacją jest możliwość powiązania obu zdarzeń.
+
+W `4624`:
+
+```text
+Linked Logon ID: 0x38BD57
+```
+
+W `4672`:
+
+```text
+Logon ID: 0x38BD57
+```
+
+Daje to zależność:
+
+```text
+4624
+Linked Logon ID: 0x38BD57
+        ↓
+4672
+Logon ID: 0x38BD57
+```
+
+Dzięki temu można potwierdzić, że konkretna sesja logowania jest powiązana z sesją, której Windows przypisał specjalne uprawnienia.
 
 ---
 
-## Status
+# Windows → Wazuh
 
-🚧 **Projekt w trakcie realizacji**
+Kolejnym krokiem było sprawdzenie, czy Wazuh odbiera ten sam Event ID `4672` bez utraty najważniejszych informacji.
 
-Kolejne etapy będą dodawane wraz z rozwojem projektu.
+W Wazuh widoczne są:
+
+```text
+agent.name = LAB-W11-1
+eventID = 4672
+subjectDomainName = CYBER
+subjectUserName = adm-ctworzewski
+subjectLogonId = 0x38bd57
+```
+
+![Wazuh Event ID 4672](screenshots/03-wazuh-4672-logon-id.png)
+
+To dokładnie ten sam identyfikator sesji, który był widoczny lokalnie w Event Viewer:
+
+```text
+Windows: 0x38BD57
+Wazuh:   0x38bd57
+```
+
+Wazuh przypisał zdarzenie do domyślnej reguły:
+
+```text
+Rule ID: 67028
+Level: 3
+Description: Special privileges assigned to new logon.
+```
+
+![Wazuh Rule 67028](screenshots/04-wazuh-4672-rule-details.png)
+
+---
+
+# Co potwierdzono w Etapie 1
+
+- [x] konto testowe `adm-ctworzewski` istnieje,
+- [x] Windows generuje `4624`,
+- [x] Windows generuje `4672`,
+- [x] możliwa jest korelacja po `Logon ID`,
+- [x] Wazuh odbiera `4672`,
+- [x] Wazuh zachowuje użytkownika, domenę i `Logon ID`,
+- [x] domyślna reguła Wazuh `67028` poprawnie klasyfikuje `4672`.
+
+# Dlaczego ten etap jest ważny
+
+Samo wykrycie `4672` nie oznacza jeszcze incydentu bezpieczeństwa. Windows może generować wiele zdarzeń związanych z tokenami, sesjami i działaniem systemu.
+
+Dlatego projekt nie będzie opierał się wyłącznie na:
+
+```text
+4672 = ALERT
+```
+
+Docelowo detekcja ma uwzględniać również:
+
+- właściwe konto uprzywilejowane,
+- typ logowania,
+- uruchomienie PowerShell,
+- proces nadrzędny,
+- wykonane polecenia,
+- sekwencję zdarzeń w określonym czasie.
+
+# Następny etap
+
+## Etap 2 – Sysmon
+
+Kolejny krok:
+
+```text
+instalacja Sysmon
+        ↓
+Event ID 1 – Process Create
+        ↓
+powershell.exe
+        ↓
+CommandLine
+        ↓
+User
+        ↓
+ParentImage
+        ↓
+Wazuh
+```
+
+Celem będzie sprawdzenie, czy po logowaniu konta uprzywilejowanego uruchomiono PowerShell oraz z jakim kontekstem procesowym.
+
+# Status
+
+✅ **Etap 1 zakończony**
+
+```text
+Windows 4624
+        ↓
+Windows 4672
+        ↓
+korelacja po Logon ID
+        ↓
+Wazuh 4672 / Rule 67028
+```
+
+🚧 **Następny krok: Sysmon / Process Create**
