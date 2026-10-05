@@ -86,7 +86,7 @@ Linked Logon ID: 0x38BD57
 
 > `Logon Type 7` oznacza odblokowanie istniejącej sesji. W dalszej części projektu ten typ będzie celowo wyłączony z właściwej detekcji logowania uprzywilejowanego.
 
-![Windows Event ID 4624](screenshots/01-windows-4624-linked-logon-id.png)
+![Windows Event ID 4624](../screenshots/01-windows-4624-linked-logon-id.png)
 
 ## Event ID 4672 – specjalne uprawnienia
 
@@ -111,7 +111,7 @@ SeSystemEnvironmentPrivilege
 SeImpersonatePrivilege
 ```
 
-![Windows Event ID 4672](screenshots/02-windows-4672-special-privileges.png)
+![Windows Event ID 4672](../screenshots/02-windows-4672-special-privileges.png)
 
 ## Korelacja 4624 → 4672 po Logon ID
 
@@ -157,7 +157,7 @@ subjectUserName = adm-ctworzewski
 subjectLogonId = 0x38bd57
 ```
 
-![Wazuh Event ID 4672](screenshots/03-wazuh-4672-logon-id.png)
+![Wazuh Event ID 4672](../screenshots/03-wazuh-4672-logon-id.png)
 
 To dokładnie ten sam identyfikator sesji, który był widoczny lokalnie w Event Viewer:
 
@@ -174,7 +174,7 @@ Level: 3
 Description: Special privileges assigned to new logon.
 ```
 
-![Wazuh Rule 67028](screenshots/04-wazuh-4672-rule-details.png)
+![Wazuh Rule 67028](../screenshots/04-wazuh-4672-rule-details.png)
 
 ---
 
