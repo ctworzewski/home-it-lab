@@ -31,7 +31,7 @@ n8n
 jeden skorelowany alert SMTP
 ```
 
-Projekt jest wykonywany w środowisku LAB i służy do nauki analizy zdarzeń Windows, korelacji, Detection Engineering oraz automatyzacji obsługi alertów.
+Projekt jest wykonywany w środowisku LAB i służy do nauki analizy zdarzeń Windows, Sysmon, korelacji, Detection Engineering oraz automatyzacji obsługi alertów.
 
 ---
 
@@ -44,6 +44,7 @@ Projekt jest wykonywany w środowisku LAB i służy do nauki analizy zdarzeń Wi
 | `CYBER\adm-ctworzewski` | testowe konto uprzywilejowane |
 | Wazuh Agent | zbieranie logów ze stacji |
 | Wazuh Manager | analiza zdarzeń i własne reguły |
+| Sysmon | telemetria procesów |
 
 ---
 
@@ -98,18 +99,7 @@ Domain: CYBER
 Logon ID: 0x38BD57
 ```
 
-Zdarzenie potwierdza przypisanie do sesji specjalnych uprawnień, m.in.:
-
-```text
-SeSecurityPrivilege
-SeTakeOwnershipPrivilege
-SeLoadDriverPrivilege
-SeBackupPrivilege
-SeRestorePrivilege
-SeDebugPrivilege
-SeSystemEnvironmentPrivilege
-SeImpersonatePrivilege
-```
+Zdarzenie potwierdza przypisanie do sesji specjalnych uprawnień.
 
 ![Windows Event ID 4672](../screenshots/02-windows-4672-special-privileges.png)
 
@@ -159,7 +149,7 @@ subjectLogonId = 0x38bd57
 
 ![Wazuh Event ID 4672](../screenshots/03-wazuh-4672-logon-id.png)
 
-To dokładnie ten sam identyfikator sesji, który był widoczny lokalnie w Event Viewer:
+To ten sam identyfikator sesji, który był widoczny lokalnie w Event Viewer:
 
 ```text
 Windows: 0x38BD57
@@ -188,61 +178,231 @@ Description: Special privileges assigned to new logon.
 - [x] Wazuh zachowuje użytkownika, domenę i `Logon ID`,
 - [x] domyślna reguła Wazuh `67028` poprawnie klasyfikuje `4672`.
 
-# Dlaczego ten etap jest ważny
+---
 
-Samo wykrycie `4672` nie oznacza jeszcze incydentu bezpieczeństwa. Windows może generować wiele zdarzeń związanych z tokenami, sesjami i działaniem systemu.
+# Etap 2 – Sysmon i uruchomienie PowerShell
 
-Dlatego projekt nie będzie opierał się wyłącznie na:
+Drugim etapem projektu jest rozszerzenie telemetrii o Sysmon i sprawdzenie, czy po użyciu konta uprzywilejowanego można wykryć uruchomienie PowerShell.
+
+Interesuje nas przede wszystkim:
 
 ```text
-4672 = ALERT
+Sysmon Event ID 1 – Process Create
 ```
 
-Docelowo detekcja ma uwzględniać również:
+Dzięki temu zdarzeniu można uzyskać m.in.:
 
-- właściwe konto uprzywilejowane,
-- typ logowania,
-- uruchomienie PowerShell,
-- proces nadrzędny,
-- wykonane polecenia,
-- sekwencję zdarzeń w określonym czasie.
+- ścieżkę procesu,
+- `CommandLine`,
+- użytkownika,
+- `ProcessId`,
+- `ProcessGuid`,
+- `LogonId`,
+- `IntegrityLevel`,
+- informacje o procesie nadrzędnym,
+- hash procesu.
 
-# Następny etap
+## Sysmon – lokalny Event ID 1
 
-## Etap 2 – Sysmon
-
-Kolejny krok:
+Po uruchomieniu PowerShell jako konto:
 
 ```text
-instalacja Sysmon
-        ↓
-Event ID 1 – Process Create
+CYBER\adm-ctworzewski
+```
+
+Sysmon zarejestrował:
+
+```text
+Event ID: 1
+Image: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+User: CYBER\adm-ctworzewski
+ProcessId: 9900
+LogonId: 0x950c3
+IntegrityLevel: High
+```
+
+`IntegrityLevel: High` potwierdza, że proces został uruchomiony w kontekście podwyższonych uprawnień.
+
+![Windows Sysmon Event ID 1](../screenshots/05-windows-sysmon-event1-powershell.png)
+
+---
+
+## Sysmon → Wazuh
+
+Do konfiguracji agenta Wazuh na `LAB-W11-1` dodano kanał Sysmon:
+
+```xml
+<localfile>
+  <location>Microsoft-Windows-Sysmon/Operational</location>
+  <log_format>eventchannel</log_format>
+</localfile>
+```
+
+Po restarcie usługi agenta:
+
+```powershell
+Restart-Service WazuhSvc
+```
+
+Wazuh zaczął odbierać zdarzenia Sysmon.
+
+Dla tego samego uruchomienia PowerShell widoczne są m.in.:
+
+```text
+agent.name = LAB-W11-1
+image = C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+processId = 9900
+logonId = 0x950c3
+integrityLevel = High
+```
+
+![Wazuh Sysmon Event ID 1 – details](../screenshots/06-wazuh-sysmon-event1-powershell-details.png)
+
+Na poziomie reguły Wazuh zdarzenie zostało sklasyfikowane jako:
+
+```text
+Rule ID: 100100
+Level: 3
+Description: Sysmon - Event 1: Process creation Windows PowerShell
+```
+
+![Wazuh Sysmon rule details](../screenshots/07-wazuh-sysmon-event1-rule-details.png)
+
+---
+
+## Korelacja Windows Sysmon → Wazuh
+
+Dla obu stron widoczny jest ten sam proces:
+
+```text
+PowerShell.exe
+ProcessId: 9900
+LogonId: 0x950c3
+IntegrityLevel: High
+```
+
+Daje to czytelny przepływ:
+
+```text
+CYBER\adm-ctworzewski
         ↓
 powershell.exe
         ↓
-CommandLine
+Sysmon Event ID 1
         ↓
-User
-        ↓
-ParentImage
+ProcessId 9900 / LogonId 0x950c3
         ↓
 Wazuh
+        ↓
+Rule 100100
 ```
 
-Celem będzie sprawdzenie, czy po logowaniu konta uprzywilejowanego uruchomiono PowerShell oraz z jakim kontekstem procesowym.
+To potwierdza, że Wazuh nie tylko odbiera Sysmon, ale zachowuje kontekst potrzebny do dalszej korelacji.
 
-# Status
+---
 
-✅ **Etap 1 zakończony**
+# Co potwierdzono w Etapie 2
+
+- [x] Sysmon działa na `LAB-W11-1`,
+- [x] Sysmon generuje Event ID `1`,
+- [x] wykrywane jest uruchomienie `powershell.exe`,
+- [x] widoczny jest użytkownik `CYBER\adm-ctworzewski`,
+- [x] widoczny jest `ProcessId`,
+- [x] widoczny jest `LogonId`,
+- [x] widoczny jest `IntegrityLevel: High`,
+- [x] Wazuh odbiera Sysmon Event ID `1`,
+- [x] Wazuh klasyfikuje zdarzenie regułą `100100`.
+
+---
+
+# Dlaczego Sysmon jest ważny w tym projekcie
+
+Windows Security Log pozwala odpowiedzieć na pytanie:
+
+> **kto się zalogował?**
+
+Sysmon rozszerza ten kontekst o:
+
+> **co użytkownik uruchomił?**
+
+Dzięki temu zamiast pojedynczego alertu o logowaniu możemy budować sekwencję:
 
 ```text
-Windows 4624
+konto uprzywilejowane
         ↓
-Windows 4672
+logowanie
         ↓
-korelacja po Logon ID
-        ↓
-Wazuh 4672 / Rule 67028
+PowerShell
 ```
 
-🚧 **Następny krok: Sysmon / Process Create**
+Samo uruchomienie PowerShell nie oznacza incydentu. Jest to jednak istotny element kontekstu, szczególnie gdy występuje bezpośrednio po logowaniu konta administracyjnego.
+
+---
+
+# Następny etap
+
+## Etap 3 – PowerShell Script Block Logging
+
+Sysmon pokazuje, że uruchomiono:
+
+```text
+powershell.exe
+```
+
+ale nie zawsze daje pełną odpowiedź na pytanie:
+
+> **co dokładnie zostało wykonane wewnątrz PowerShell?**
+
+Dlatego kolejnym etapem będzie włączenie:
+
+```text
+PowerShell Script Block Logging
+```
+
+i analiza:
+
+```text
+Event ID 4104
+```
+
+Docelowo chcemy uzyskać:
+
+```text
+Privileged Account Logon
+        ↓
+PowerShell Process
+        ↓
+ScriptBlockText
+        ↓
+konkretne wykonane polecenie
+```
+
+---
+
+# Status projektu
+
+✅ **Etap 1 – Windows Security / Wazuh zakończony**
+
+```text
+4624
+↓
+4672
+↓
+korelacja po Logon ID
+↓
+Wazuh Rule 67028
+```
+
+✅ **Etap 2 – Sysmon / PowerShell zakończony**
+
+```text
+PowerShell
+↓
+Sysmon Event ID 1
+↓
+ProcessId / LogonId / IntegrityLevel
+↓
+Wazuh Rule 100100
+```
+
+🚧 **Następny krok: PowerShell Script Block Logging / Event ID 4104**
