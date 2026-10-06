@@ -26,6 +26,8 @@ Głównym celem jest praktyczna nauka:
 - ✅ [03 – Własna reguła Wazuh 119100](docs/03-custom-rule-119100.md)
 - ✅ [04 – Integracja Wazuh + n8n + SMTP](docs/04-n8n-smtp-integration.md)
 - ✅ [05 – Wykrywanie blokady konta Active Directory](docs/05-ad-account-lockout-detection.md)
+- ✅ [06 – Privileged Account Logon Detection + PowerShell Correlation](/docs/06-privileged-account-logon-detection.md)
+- ⬜ 07 – AD Privilege Escalation Detection
 
 ### 🚧 W trakcie
 
