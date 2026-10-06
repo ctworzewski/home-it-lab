@@ -385,31 +385,217 @@ W produkcji nie należy jednak opierać detekcji wyłącznie na jednej nazwie ko
 
 ---
 
-# Status projektu
+---
+
+# Etap 5 – korelacja Wazuh → n8n → jeden alert SMTP
+
+Po zbudowaniu trzech własnych reguł Wazuh kolejnym etapem było połączenie ich w jeden incydent.
+
+Źródłowe reguły:
+
+```text
+100200 → logowanie konta uprzywilejowanego
+100201 → uruchomienie PowerShell
+100203 → enumeracja lokalnej grupy Administratorzy
+```
+
+Celem było uniknięcie trzech osobnych wiadomości i uzyskanie jednego skorelowanego alertu:
+
+```text
+3 alerty techniczne
+        ↓
+1 skorelowany incydent
+        ↓
+1 e-mail SMTP
+```
+
+## Integracja Wazuh
+
+Po stronie Wazuh wykorzystano integrację:
+
+```xml
+<integration>
+  <name>custom-n8n-privileged-powershell</name>
+  <hook_url>https://n8n.tworzewski.pl/webhook/wazuh-privileged-powershell</hook_url>
+  <rule_id>100200,100201,100203</rule_id>
+  <alert_format>json</alert_format>
+</integration>
+```
+
+Plik integracji:
+
+```text
+/var/ossec/integrations/custom-n8n-privileged-powershell
+```
+
+## Workflow n8n
+
+Workflow odbiera trzy niezależne wywołania webhooka i czeka na komplet:
+
+```text
+100200
++
+100201
++
+100203
+```
+
+Korelacja wykorzystuje:
+
+```text
+host
++
+użytkownik
++
+okno czasowe 5 minut
+```
+
+Dopiero po zebraniu całej sekwencji workflow generuje jeden incydent i przekazuje go do SMTP.
+
+Przepływ:
+
+```text
+Wazuh Webhook
+        ↓
+Correlate 100200 + 100201 + 100203
+        ↓
+Send Incident Email
+```
+
+![n8n correlation workflow success](../screenshots/22-n8n-correlation-workflow-success.png)
+
+## Czyszczenie danych JSON
+
+Dane przekazywane z Wazuh mogą zawierać escape JSON, np.:
+
+```text
+C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe
+```
+
+oraz:
+
+```text
+Get-LocalGroupMember -Group \"Administratorzy\"
+```
+
+W workflow dodano czyszczenie tekstu, dzięki czemu w mailu wartości są prezentowane jako:
+
+```text
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+```
+
+oraz:
+
+```powershell
+Get-LocalGroupMember -Group "Administratorzy"
+```
+
+## Finalny alert SMTP
+
+Finalna wiadomość zawiera cały kontekst incydentu:
+
+```text
+Host: LAB-W11-1
+Użytkownik: adm-ctworzewski
+Okno korelacji: 5 minut
+```
+
+### 1 / 3 – Rule 100200
+
+```text
+Logowanie konta uprzywilejowanego
+Event ID: 4624
+Logon Type: 11
+Level: 8
+```
+
+### 2 / 3 – Rule 100201
+
+```text
+Uruchomienie PowerShell
+Image: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+Integrity Level: High
+Level: 7
+```
+
+### 3 / 3 – Rule 100203
+
+```text
+Enumeracja lokalnej grupy
+Event ID: 4104
+Level: 12
+ScriptBlock:
+Get-LocalGroupMember -Group "Administratorzy"
+```
+
+![n8n correlated privileged PowerShell email](../screenshots/21-n8n-correlated-privileged-powershell-email.png)
+
+Najważniejszy rezultat:
+
+```text
+100200
+        ↓
+100201
+        ↓
+100203
+        ↓
+n8n correlation
+        ↓
+1 incident
+        ↓
+1 SMTP alert
+```
+
+---
+
+# Co daje Etap 5
+
+Ten etap zmienia kilka niezależnych alertów w jeden czytelny incydent.
+
+Zamiast analizować osobno:
+
+```text
+kto się zalogował?
+co uruchomił?
+jakie polecenie wykonał?
+```
+
+otrzymujemy jeden raport zawierający cały kontekst zdarzenia.
+
+W praktyce może to ograniczyć szum alertowy i przyspieszyć analizę incydentu.
+
+---
+
+# Finalny status projektu
 
 ✅ **Etap 1 – Windows Security / Wazuh**  
 ✅ **Etap 2 – Sysmon / PowerShell**  
 ✅ **Etap 3 – PowerShell Script Block Logging**  
-✅ **Etap 4 – własne reguły Wazuh**
+✅ **Etap 4 – własne reguły Wazuh**  
+✅ **Etap 5 – n8n correlation + SMTP**
+
+Finalny przepływ:
 
 ```text
-100200 → Privileged Logon
-100201 → PowerShell Process
-100203 → Local Administrators Discovery
+Windows 4624 / 4672
+        ↓
+Privileged Account Logon
+        ↓
+Wazuh Rule 100200
+        ↓
+Sysmon Event ID 1
+        ↓
+Wazuh Rule 100201
+        ↓
+PowerShell Event ID 4104
+        ↓
+Wazuh Rule 100203
+        ↓
+n8n correlation
+        ↓
+1 incident
+        ↓
+1 SMTP alert
 ```
 
-🚧 **Następny krok – Etap 5: korelacja w n8n + jeden incydent + jeden alert SMTP**
-
-```text
-100200
-  +
-100201
-  +
-100203
-  ↓
-korelacja po host / user / czasie
-  ↓
-1 incydent
-  ↓
-1 e-mail SMTP
-```
+Projekt pokazuje pełny przepływ od telemetrii endpointu, przez własne reguły detekcji, aż po automatyczną korelację i czytelny alert końcowy.
