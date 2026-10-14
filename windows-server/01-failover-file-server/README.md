@@ -25,20 +25,54 @@
 
 ## Architektura
 
+Poniższy diagram pokazuje **stan po teście awarii i ponownym uruchomieniu FS2**: rola plikowa działa na FS1, natomiast FS2 jest ponownie aktywnym węzłem klastra i może przejąć rolę podczas kolejnego failover. Diagram rozdziela **usługę SMB**, **węzły klastra**, **Active Directory/DNS** i **wspólny storage**.
+
 ```mermaid
 flowchart TB
-  W[LAB-W11-1 / klienci SMB] -->|SMB 445| V[LAB-FILES / 10.1.201.224]
-  V --> C[LAB-CLUSTER / 10.1.201.223]
-  C --> F1[FS1 / 10.1.201.221]
-  C --> F2[FS2 / 10.1.201.222]
-  F1 -->|iSCSI 3260| T[TrueNAS SCALE / 10.1.201.230]
-  F2 -->|iSCSI 3260| T
-  T --> D[(LUN 0 / DATA / 30 GiB)]
-  T --> Q[(LUN 1 / Witness / 1 GiB)]
-  AD[LAB-DC1 / Active Directory + DNS] -.-> C
+    PC["LAB-W11-1<br/>Klient Windows 11"]
+    AD["LAB-DC1<br/>AD DS + DNS"]
+
+    subgraph CL["LAB-CLUSTER — klaster WS2025"]
+        direction TB
+        VIP["LAB-FILES<br/>Wirtualna nazwa i IP SMB"]
+        FS1["FS1<br/>Aktywny właściciel"]
+        FS2["FS2<br/>Drugi węzeł — Up"]
+        VIP --> FS1
+        VIP -. "Failover" .-> FS2
+    end
+
+    subgraph NAS["TrueNAS SCALE — współdzielony storage"]
+        direction TB
+        TARGET["iSCSI Target"]
+        DATA[("LUN 0 — DATA<br/>30 GiB")]
+        WIT[("LUN 1 — Witness<br/>1 GiB")]
+        TARGET --> DATA
+        TARGET --> WIT
+    end
+
+    PC -->|"SMB / TCP 445"| VIP
+    PC -. "DNS / uwierzytelnianie" .-> AD
+    AD -. "AD DS / DNS" .-> CL
+    FS1 -->|"iSCSI / TCP 3260"| TARGET
+    FS2 -->|"iSCSI / TCP 3260"| TARGET
 ```
 
-**Jak to działa:** rolę `LAB-FILES` posiada w danym momencie jeden węzeł, choć oba węzły widzą wspólne LUN-y. Klaster zarządza własnością współdzielonego dysku i adresem/nazwą serwera plików. `LAB-CLUSTER` jest administracyjną nazwą klastra, a `LAB-FILES` nazwą usługi SMB. Osobny LUN świadka **nie** jest miejscem na pliki użytkowników.
+### Adresacja i role komponentów
+
+| Komponent | Adres IP | Funkcja |
+|---|---|---|
+| LAB-DC1 | `10.1.201.200` | AD DS, DNS domeny `cyber.local` — **nie jest węzłem klastra** |
+| FS1 | `10.1.201.221` | Węzeł Windows Server 2025; aktualny właściciel roli SMB |
+| FS2 | `10.1.201.222` | Drugi węzeł Windows Server 2025; gotowy do przejęcia roli |
+| LAB-CLUSTER | `10.1.201.223` | Administracyjny punkt dostępu do klastra (CNO) |
+| LAB-FILES | `10.1.201.224` | Wirtualny punkt dostępu do klastrowej usługi SMB |
+| TrueNAS SCALE | `10.1.201.230` | iSCSI Target z dwoma LUN-ami |
+
+**Przepływ danych:** klient łączy się z `\\LAB-FILES\DANE` przez SMB (`TCP/445`). Usługę obsługuje aktualny właściciel roli, teraz **FS1**. Po awarii rola oraz własność dysku danych mogą przejść na **FS2**, bez zmiany nazwy udziału.
+
+**Przepływ storage:** FS1 i FS2 posiadają połączenia iSCSI do tego samego TrueNAS (`TCP/3260`) i widzą oba LUN-y. W przypadku dysku danych zwykłego klastra File Server tylko aktualny właściciel zasobu ma prawo go aktywnie używać; koordynacją zajmuje się Failover Clustering. `LUN 1` o pojemności 1 GiB jest świadkiem quorum, **nie** dyskiem na pliki użytkowników.
+
+**AD/DNS:** LAB-DC1 pomaga w rozpoznawaniu nazw, uwierzytelnianiu i integracji obiektów klastra z domeną. Nie przekazuje ruchu SMB między klientem i serwerem plików oraz nie jest trzecim węzłem klastra.
 
 ## Pełna dokumentacja projektu
 
