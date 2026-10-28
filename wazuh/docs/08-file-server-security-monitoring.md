@@ -1,6 +1,6 @@
 # Projekt 08 — Monitorowanie bezpieczeństwa serwera plików (Wazuh FIM + WhoData)
 
-> **Status:** ✅ Wazuh FIM/WhoData przetestowano na FS1 i FS2; potwierdzono również wykrywanie usunięcia pliku po kontrolowanym przełączeniu roli `LAB-FILES` z FS2 na FS1.  
+> **Status:** ✅ Wazuh FIM/WhoData przetestowano na FS1 i FS2; zweryfikowano usunięcie pliku po przełączeniu `LAB-FILES` z FS2 na FS1 oraz automatyczne powiadomienie e-mail Wazuh → n8n.  
 > **Do wykonania:** monitoring pozostałych działów, wykrywanie masowego usuwania i test odporności podczas samej przerwy przełączeniowej.  
 > **Środowisko:** Windows Server 2025, Active Directory, Failover Cluster, SMB, NTFS, TrueNAS iSCSI, Wazuh 4.14.8.  
 > **Testy:** 16 i 27–28 października 2026 r.
@@ -29,6 +29,11 @@ LAB-FILES (rola klastrowego serwera plików)
               +-- S:\CYFROWY POLSAT\...
 
 Agenty FS1/FS2 ---> Wazuh Manager 10.1.201.201 ---> Wazuh Dashboard
+                                     |
+                                     +-- reguła 553 / Integrator
+                                             | HTTPS POST
+                                             v
+                                      n8n Webhook → filtr → SMTP → e-mail
 ```
 
 | Element | Konfiguracja |
@@ -294,7 +299,85 @@ Do wykonania przed dalszymi testami reguły:
 
 Osobno odnotowano ostrzeżenia o brakującej grupie `sysmon_event_7` dla reguł `900177–900186`. Nie były one przyczyną niepowodzenia testu FIM.
 
-## 9. Lista kontrolna projektu
+## 9. Automatyczne powiadomienie — Wazuh → n8n → e-mail
+
+**Status: wdrożone i przetestowane 28 października 2026 r.** Po wykryciu usunięcia pliku Wazuh przekazuje pełny alert JSON do n8n, gdzie sprawdzane są warunki zdarzenia i przygotowywany czytelny e-mail HTML w języku polskim.
+
+### 9.1. Przepływ zdarzeń
+
+```text
+Pracownik (SMB) usuwa dokument
+          ↓
+Aktywny węzeł LAB-FILES (FS1 albo FS2)
+          ↓
+Wazuh Agent — FIM WhoData
+          ↓
+Wazuh Manager — reguła 553, poziom 7
+          ↓
+wazuh-integratord — custom-n8n-file-deletion
+          ↓  HTTPS POST, alert JSON
+n8n Webhook /08-file-deletion-monitoring
+          ↓
+Filtr: agent FS1/FS2 + deleted + whodata + katalog Ksiegowosc
+          ↓
+Szablon e-mail HTML → SMTP → skrzynka administratora
+```
+
+### 9.2. Konfiguracja Wazuh Manager
+
+W istniejącej sekcji `<ossec_config>` pliku `/var/ossec/etc/ossec.conf` skonfigurowano:
+
+```xml
+<integration>
+  <name>custom-n8n-file-deletion</name>
+  <hook_url>https://n8n.tworzewski.pl/webhook/08-file-deletion-monitoring</hook_url>
+  <rule_id>553</rule_id>
+  <alert_format>json</alert_format>
+</integration>
+```
+
+Skrypt wykonywalny: `/var/ossec/integrations/custom-n8n-file-deletion`. Druga kopia z końcówką `.py` powstała pomocniczo; nazwa skryptu uruchamianego przez Integrator wynika z `<name>`. Pliki projektu: [skrypt integracyjny](../scripts/08-file-server-security-monitoring/custom-n8n-file-deletion) i [eksport workflow n8n](../n8n/08-file-server-security-monitoring/08-Wazuh-Usuniecie-Pliku-n8n.json). Zanim użyjesz go poza laboratorium, zabezpiecz webhook autoryzacją lub restrykcją sieciową. Nie umieszczaj sekretów SMTP ani tokenów w repozytorium.
+
+Uprawnienia pliku integracji:
+
+```bash
+sudo chown root:wazuh /var/ossec/integrations/custom-n8n-file-deletion
+sudo chmod 750 /var/ossec/integrations/custom-n8n-file-deletion
+sudo systemctl restart wazuh-manager
+```
+
+**Ważny wniosek z diagnostyki:** pierwsze uruchomienie managera nastąpiło **przed utworzeniem skryptu**, dlatego log zawierał błąd `File not found inside 'integrations'`. Po utworzeniu skryptu i ponownym uruchomieniu managera Integrator mógł obsłużyć nową integrację. Test `curl` zwrócił `HTTP/2 200` i `Workflow was started`. Ręczne przesłanie rzeczywistego alertu potwierdziło poprawność webhooka i SMTP, a następnie zweryfikowano **automatyczne powiadomienie po faktycznym usunięciu dokumentu**.
+
+### 9.3. Pola w powiadomieniu
+
+| Informacja | Źródło w alercie Wazuh |
+|---|---|
+| Kto usunął | `syscheck.audit.user.name` |
+| Kiedy | `timestamp` — prezentowany w e-mailu w czasie polskim |
+| Co usunięto | nazwa pliku z `syscheck.path` |
+| Pełna ścieżka | `syscheck.path` |
+| Serwer | `agent.name` |
+| Zdarzenie | `syscheck.event = deleted`, `syscheck.mode = whodata` |
+| Identyfikator reguły | `rule.id = 553` |
+
+### 9.4. Dowód — automatyczne wysłanie wiadomości
+
+Po restarcie Integratora użytkownik `CYBER\akowalska` usunął testowy dokument `faktura-13-09-2026_n8n.txt` z folderu Księgowości. Wazuh wyświetlił alert **553** na agencie **FS1**, a n8n wysłał e-mail z tym samym plikiem, użytkownikiem i czasem zdarzenia **28.10.2026, 22:42:17 czasu polskiego**. Nie trzeba było uruchamiać skryptu ręcznie.
+
+![Końcowy test — alert Wazuh i automatyczny e-mail obok siebie](../screenshots/08-file-server-security-monitoring/20261028-224217-Wazuh-n8n-Mail-AUTO.png)
+
+Poniżej osobny widok szablonu wiadomości z wcześniejszego **ręcznego testu integracji** na prawdziwym alercie (test poprzedzający uruchomienie automatyczne):
+
+![Szablon HTML — kto, kiedy i co usunięto](../screenshots/08-file-server-security-monitoring/20261028-Email-HTML-Test.png)
+
+### 9.5. Zakres i ograniczenia
+
+- Potwierdzono **automatyczne dostarczenie e-maila na podstawie usunięcia pliku na FS1**. WhoData na FS2 było przetestowane oddzielnie; automatyczne powiadomienie n8n po zdarzeniu na FS2 pozostaje do sprawdzenia.
+- Filtr obejmuje obecnie katalog `S:\CYFROWY POLSAT\Ksiegowosc` na FS1 i FS2; pozostałe działy nie są jeszcze objęte powiadomieniem.
+- Aktualny przepływ wysyła wiadomość dla pojedynczego usunięcia. Deduplicacja, korelacja serii usunięć i powiadomienie zbiorcze pozostają do opracowania.
+- Katalog i konta są laboratoryjne, wszystkie pliki testowe są fikcyjne.
+
+## 10. Lista kontrolna projektu
 
 - [x] Przygotowanie struktury organizacyjnej i kont AD
 - [x] Utworzenie katalogów firmowych na dysku klastrowym
@@ -309,11 +392,15 @@ Osobno odnotowano ostrzeżenia o brakującej grupie `sysmon_event_7` dla reguł 
 - [x] WhoData na FS2: usunięcie pliku z identyfikacją `akowalska`
 - [x] Kontrolowane przełączenie `FS2 → FS1` — rola Online na FS1
 - [x] Wykrycie usunięcia w podfolderze Księgowości po przełączeniu na FS1
+- [x] Automatyczne przekazywanie alertu 553 z FS1 przez Integrator i webhook n8n
+- [x] E-mail HTML: użytkownik, data i godzina, dokument, pełna ścieżka i serwer
+- [ ] Automatyczny e-mail po zdarzeniu na FS2
+- [ ] Zabezpieczenie webhooka autoryzacją / ograniczeniem dostępu
 - [ ] Test działań wykonywanych dokładnie podczas przełączania klastra
 - [ ] Detekcja masowego usuwania dokumentów
 - [ ] Wyłączenie tymczasowego `logall_json` po zakończeniu diagnostyki i ustalenie retencji
 
-## 10. Dalszy rozwój
+## 11. Dalszy rozwój
 
 **Rozszerzenie zakresu:** objęcie WhoData folderów Kadry, Produkcja, Zarząd, IT, Public i Testy_Wazuh; kontrola wydajności oraz natężenia zdarzeń.
 
@@ -323,9 +410,9 @@ Osobno odnotowano ostrzeżenia o brakującej grupie `sysmon_event_7` dla reguł 
 
 **Higiena konfiguracji:** przegląd niestandardowych reguł Wazuh, retencji logów, kopii SACL i uprawnień udostępnionych do publicznego repozytorium.
 
-## 11. Podsumowanie
+## 12. Podsumowanie
 
-W laboratorium z klastrem Windows Server i TrueNAS iSCSI udało się wdrożyć monitoring plików przez Wazuh FIM. Najważniejszym rezultatem jest **potwierdzona detekcja usunięcia dokumentu przez użytkownika `akowalska` w trybie WhoData**. Detekcję WhoData potwierdzono na obu węzłach, także po kontrolowanym przełączeniu roli FS2 → FS1. Pozostają: monitoring wszystkich działów, test zachowania w trakcie przełączania oraz korelacja masowego usuwania.
+W laboratorium z klastrem Windows Server i TrueNAS iSCSI udało się wdrożyć monitoring plików przez Wazuh FIM. Najważniejszym rezultatem jest **potwierdzona detekcja usunięcia dokumentu przez użytkownika `akowalska` w trybie WhoData**. Detekcję WhoData potwierdzono na obu węzłach, także po kontrolowanym przełączeniu roli FS2 → FS1. W kolejnym kroku dołożono automatyczną integrację z n8n, która w udanym teście wysłała e-mail HTML z informacją o usuniętym pliku. Pozostają: monitoring wszystkich działów, ochrona webhooka, test e-maila na FS2, test zachowania w trakcie przełączania oraz korelacja masowego usuwania.
 
 ---
 
