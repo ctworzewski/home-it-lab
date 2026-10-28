@@ -1,7 +1,7 @@
 # Projekt 08 — Monitorowanie bezpieczeństwa serwera plików (Wazuh FIM + WhoData)
 
-> **Status:** ✅ Zrealizowano i potwierdzono wykrywanie dodania, modyfikacji oraz usunięcia pliku z identyfikacją użytkownika na FS1.  
-> **Do wykonania:** monitoring pozostałych działów, test FS2 po przełączeniu klastra i korelacja masowego usuwania.  
+> **Status:** ✅ Wazuh FIM/WhoData przetestowano na FS1 i FS2; potwierdzono również wykrywanie usunięcia pliku po kontrolowanym przełączeniu roli `LAB-FILES` z FS2 na FS1.  
+> **Do wykonania:** monitoring pozostałych działów, wykrywanie masowego usuwania i test odporności podczas samej przerwy przełączeniowej.  
 > **Środowisko:** Windows Server 2025, Active Directory, Failover Cluster, SMB, NTFS, TrueNAS iSCSI, Wazuh 4.14.8.  
 > **Testy:** 16 i 27–28 października 2026 r.
 
@@ -9,7 +9,7 @@
 
 Celem projektu jest stworzenie w domowym laboratorium mechanizmu monitorowania operacji na plikach firmowych udostępnianych przez **klastrowy serwer plików**. System powinien wykrywać utworzenie, modyfikację i usunięcie dokumentu, a w przypadku usunięcia — wskazać użytkownika domenowego, który wykonał operację.
 
-**Potwierdzony rezultat:** Wazuh FIM w trybie **WhoData** zarejestrował usunięcie pliku `fvat10.txt` i powiązał je z kontem `CYBER\akowalska`. Wynik dotyczy monitorowanego katalogu Księgowości na **FS1**. Nie jest jeszcze potwierdzeniem ciągłości monitoringu po przełączeniu na FS2.
+**Potwierdzony rezultat:** Wazuh FIM w trybie **WhoData** zarejestrował usunięcie pliku `fvat10.txt` i powiązał je z kontem `CYBER\akowalska`. Później potwierdzono również usunięcie dokumentu na **FS2**, wraz z identyfikacją `akowalska`, oraz wykrycie usunięcia na **FS1 po przełączeniu roli z FS2**. Testy nie dowodzą, że każda operacja wykonana dokładnie podczas przełączania zostanie zarejestrowana.
 
 ## 2. Architektura laboratorium
 
@@ -44,7 +44,7 @@ Agenty FS1/FS2 ---> Wazuh Manager 10.1.201.201 ---> Wazuh Dashboard
 | FS1 / agent | `10.1.201.221` / `010` |
 | FS2 / agent | `10.1.201.222` / `011` |
 
-**Ważne w klastrze:** dysk `S:` jest dostępny lokalnie na węźle aktualnie obsługującym rolę. Konfigurację i działanie FIM trzeba zweryfikować oddzielnie po przełączeniu własności na FS2.
+**Ważne w klastrze:** dysk `S:` jest dostępny lokalnie na węźle aktualnie obsługującym rolę. Konfigurację WhoData uruchomiono osobno na FS1 i FS2. Weryfikacja po zmianie właściciela roli została przeprowadzona i opisana w rozdziale 7.
 
 ![Dysk klastrowy S](../screenshots/08-file-server-security-monitoring/20261016-115552-Cluster-Disk-S.png)
 
@@ -228,7 +228,60 @@ sudo jq -c '
 ' /var/ossec/logs/alerts/alerts.json | tail -20
 ```
 
-## 7. Własne reguły i problemy napotkane podczas prac
+## 7. Monitorowanie po przełączeniu klastra — testy FS2 i FS1
+
+### Test A — WhoData na FS2
+
+Po uruchomieniu roli `LAB-FILES` na **FS2** skonfigurowano na tym węźle Wazuh FIM w trybie WhoData:
+
+```xml
+<directories check_all="yes" whodata="yes">S:\CYFROWY POLSAT\Ksiegowosc</directories>
+```
+
+Log agenta FS2 potwierdził załadowanie ścieżki z opcją `whodata`. Następnie użytkownik `CYBER\akowalska` usunął plik testowy z udostępnionego katalogu Księgowości.
+
+| Pole | Zarejestrowana wartość |
+|---|---|
+| Węzeł | `FS2` — agent `011` (`10.1.201.222`) |
+| `syscheck.event` | `deleted` |
+| `syscheck.mode` | `whodata` |
+| `syscheck.audit.user.name` | `akowalska` |
+| Plik | `faktura915-1-2.txt` |
+| `rule.id` | `553` |
+| Czas lokalny | 28.10.2026, 21:24:37 |
+
+![FS2 — usunięcie dokumentu z identyfikacją użytkownika WhoData](../screenshots/08-file-server-security-monitoring/20261028-212728-FS2-WhoData-Usuniecie.png)
+
+### Test B — kontrolowane przełączenie roli FS2 → FS1
+
+Na działającej roli `LAB-FILES` wykonano w PowerShell:
+
+```powershell
+Move-ClusterGroup -Name "LAB-FILES" -Node FS1
+Get-ClusterGroup -Name LAB-FILES | Select-Object Name, OwnerNode, State
+```
+
+Polecenie oraz Failover Cluster Manager potwierdziły stan **`LAB-FILES` — `Online`, właściciel `FS1`**.
+
+![Kontrolowane przełączenie roli LAB-FILES z FS2 na FS1](../screenshots/08-file-server-security-monitoring/20261028-Failover-FS2-do-FS1.png)
+
+Następnie użytkownik `CYBER\akowalska` usunął dokument `test1234.txt` w podfolderze `Ksiegowosc\new folder (2)`. Wazuh wykrył zdarzenie na agencie **FS1 (010)**.
+
+| Pole | Zarejestrowana wartość |
+|---|---|
+| Węzeł po przełączeniu | `FS1` (`10.1.201.221`) |
+| `syscheck.path` | `s:\cyfrowy polsat\ksiegowosc\new folder (2)\test1234.txt` |
+| `syscheck.event` | `deleted` |
+| `syscheck.mode` | `whodata` |
+| `syscheck.audit.user.name` | `akowalska` |
+| Reguła | `553` (poziom 7) |
+| Czas lokalny | 28.10.2026, 21:54 |
+
+![FS1 — alert WhoData po kontrolowanym przełączeniu roli](../screenshots/08-file-server-security-monitoring/20261028-215542-FS1-WhoData-Po-Failover.png)
+
+**Wynik:** przetestowano zdarzenia usuwania na obu węzłach oraz działanie detekcji po kontrolowanym przełączeniu `FS2 → FS1`. Wykrycie usunięcia pliku w podfolderze potwierdziło także zakres monitorowania podkatalogów Księgowości. **Nie testowano operacji wykonywanych w samym momencie utraty i odzyskiwania dostępu do woluminu.**
+
+## 8. Własne reguły i problemy napotkane podczas prac
 
 Podczas tworzenia dodatkowej reguły na zdarzenie `4659` wykryto **konflikt ID `100800`** z regułą Sysmon istniejącą w pliku `100100-MITRE_TECHNIQUES_FROM_SYSMON_EVENT1.xml`. Dla nowej reguły zaproponowano numer `110800`, lecz jej poprawne dopasowanie w `wazuh-logtest` i wdrożenie na żywo **nie zostały jeszcze potwierdzone**.
 
@@ -241,7 +294,7 @@ Do wykonania przed dalszymi testami reguły:
 
 Osobno odnotowano ostrzeżenia o brakującej grupie `sysmon_event_7` dla reguł `900177–900186`. Nie były one przyczyną niepowodzenia testu FIM.
 
-## 8. Lista kontrolna projektu
+## 9. Lista kontrolna projektu
 
 - [x] Przygotowanie struktury organizacyjnej i kont AD
 - [x] Utworzenie katalogów firmowych na dysku klastrowym
@@ -253,23 +306,26 @@ Osobno odnotowano ostrzeżenia o brakującej grupie `sysmon_event_7` dla reguł 
 - [x] Wykrywanie usunięcia z identyfikacją konta `akowalska` przez WhoData
 - [ ] Usunięcie konfliktu własnych reguł i walidacja `110800` (jeśli pozostanie potrzebna)
 - [ ] Monitoring wszystkich katalogów działowych
-- [ ] Test WhoData na FS2 po kontrolowanym przełączeniu roli
+- [x] WhoData na FS2: usunięcie pliku z identyfikacją `akowalska`
+- [x] Kontrolowane przełączenie `FS2 → FS1` — rola Online na FS1
+- [x] Wykrycie usunięcia w podfolderze Księgowości po przełączeniu na FS1
+- [ ] Test działań wykonywanych dokładnie podczas przełączania klastra
 - [ ] Detekcja masowego usuwania dokumentów
 - [ ] Wyłączenie tymczasowego `logall_json` po zakończeniu diagnostyki i ustalenie retencji
 
-## 9. Dalszy rozwój
+## 10. Dalszy rozwój
 
 **Rozszerzenie zakresu:** objęcie WhoData folderów Kadry, Produkcja, Zarząd, IT, Public i Testy_Wazuh; kontrola wydajności oraz natężenia zdarzeń.
 
-**Weryfikacja failover:** konfiguracja agenta FS2, przeniesienie roli `LAB-FILES` z FS1 na FS2, potwierdzenie dostępności dysku `S:` i ponowny test `added`/`deleted` z identyfikacją użytkownika.
+**Dalsza weryfikacja failover:** odrębnie przetestować operacje wykonywane podczas samego przełączania i ewentualny wpływ ponownego skanowania FIM; dotychczas potwierdzono działanie po kontrolowanym przełączeniu FS2 → FS1.
 
 **Mini-DLP:** przygotowanie korelacji zdarzeń `deleted`, np. 10 usunięć w ciągu 60 sekund przez jednego użytkownika. Próg stanowi pomysł na test, nie zweryfikowaną regułę produkcyjną.
 
 **Higiena konfiguracji:** przegląd niestandardowych reguł Wazuh, retencji logów, kopii SACL i uprawnień udostępnionych do publicznego repozytorium.
 
-## 10. Podsumowanie
+## 11. Podsumowanie
 
-W laboratorium z klastrem Windows Server i TrueNAS iSCSI udało się wdrożyć monitoring plików przez Wazuh FIM. Najważniejszym rezultatem jest **potwierdzona detekcja usunięcia dokumentu przez użytkownika `akowalska` w trybie WhoData**. Dalsze etapy to rozszerzenie na pozostałe działy i sprawdzenie ciągłości monitorowania po przełączeniu FS1 → FS2.
+W laboratorium z klastrem Windows Server i TrueNAS iSCSI udało się wdrożyć monitoring plików przez Wazuh FIM. Najważniejszym rezultatem jest **potwierdzona detekcja usunięcia dokumentu przez użytkownika `akowalska` w trybie WhoData**. Detekcję WhoData potwierdzono na obu węzłach, także po kontrolowanym przełączeniu roli FS2 → FS1. Pozostają: monitoring wszystkich działów, test zachowania w trakcie przełączania oraz korelacja masowego usuwania.
 
 ---
 
