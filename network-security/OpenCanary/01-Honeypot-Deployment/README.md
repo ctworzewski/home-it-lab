@@ -146,11 +146,11 @@ ss -lntp | grep -E ':(21|22|80|8022|3389)\b'
 
 Po ponownym uruchomieniu Debiana potwierdzono status `active` dla trzech usług, nasłuch właściwych portów oraz obecność **sześciu reguł** wykrywania.
 
-![Systemd i reguły](screenshots/05-systemd-start.jpg)
+![Systemd i reguły](screenshots/05-systemd-start.png)
 
 *Rys. 5. Usługi i reguły przed restartem.*
 
-![Weryfikacja po restarcie](screenshots/06-po-restarcie.jpg)
+![Weryfikacja po restarcie](screenshots/06-po-restarcie.png)
 
 *Rys. 6. Weryfikacja usług, portów i reguł po restarcie Debiana.*
 
@@ -175,7 +175,7 @@ Uprawnienia istotnych plików podczas testu:
 
 Użytkownik `opencanary` należał do grup `adm` i `opencanary-logs`. Testy `test -r` i `test -w` wykonane przez `runuser` potwierdziły odczyt logu jądra i zapis do dziennika OpenCanary. Po zmianie tożsamości procesu przeprowadzono test Nmap i ponownie otrzymano zbiorczy e-mail.
 
-![Uprawnienia po hardeningu](screenshots/07-uprawnienia.jpg)
+![Uprawnienia po hardeningu](screenshots/07-uprawnienia.png)
 
 *Rys. 7. Proces `twistd` działa z ograniczonymi uprawnieniami.*
 
