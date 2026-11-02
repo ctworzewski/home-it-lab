@@ -67,7 +67,7 @@ Fragment konfiguracji — **nie jest pełnym plikiem JSON**:
 "portscan.logfile": "/var/log/kern.log"
 ```
 
-![Fałszywy panel NAS / Synology](screenshots/01-panel-nas.jpg)
+![Fałszywy panel NAS / Synology](screenshots/01-panel-nas.png)
 
 *Rys. 1. Widok fałszywego panelu NAS wygenerowanego przez OpenCanary.*
 
