@@ -95,7 +95,7 @@ sudo nmap -sS -T3 -p 1-1000 10.1.201.245
 
 **Wynik:** potwierdzono zdarzenia `logtype: 5001` ze źródła `10.1.201.226`, skierowane do `10.1.201.245`, oraz działanie reguł `canaryfw` / `canarynmap*`.
 
-![Reguły i logi wykrywania Nmap](screenshots/02-detekcja-nmap.jpg)
+![Reguły i logi wykrywania Nmap](screenshots/02-detekcja-nmap.png)
 
 *Rys. 2. Pakiety z Kali zarejestrowane przez reguły i przekazane do OpenCanary.*
 
@@ -115,7 +115,7 @@ Najpierw korzystano z wbudowanego `logging.handlers.SMTPHandler`, który wysyła
 
 Przykładowe wiadomości otrzymane w Gmailu:
 
-![Zbiorczy raport skanowania](screenshots/03-raport-nmap.jpg)
+![Zbiorczy raport skanowania](screenshots/03-raport-nmap.png)
 
 *Rys. 3. Raport zawierający adres źródłowy, cel, liczbę pakietów i listę zaobserwowanych portów.*
 
