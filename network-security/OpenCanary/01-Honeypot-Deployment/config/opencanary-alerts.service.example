@@ -1,0 +1,18 @@
+[Unit]
+Description=OpenCanary - czytelne alerty Gmail
+Wants=network-online.target
+Requires=opencanary.service
+After=network-online.target opencanary.service
+
+[Service]
+Type=simple
+User=root
+EnvironmentFile=/etc/opencanaryd/mail-alerts.env
+ExecStart=/opt/opencanary/venv/bin/python /opt/opencanary/mail-alerts.py
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

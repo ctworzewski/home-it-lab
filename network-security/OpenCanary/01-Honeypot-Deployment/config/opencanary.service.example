@@ -1,0 +1,19 @@
+[Unit]
+Description=OpenCanary Honeypot
+Wants=network-online.target
+After=network-online.target rsyslog.service
+
+[Service]
+Type=forking
+User=root
+Group=root
+WorkingDirectory=/opt/opencanary
+Environment=PATH=/opt/opencanary/venv/bin:/usr/sbin:/usr/bin:/sbin:/bin
+PIDFile=/run/opencanaryd.pid
+ExecStart=/opt/opencanary/venv/bin/opencanaryd --start --uid=opencanary --gid=opencanary
+ExecStop=/opt/opencanary/venv/bin/opencanaryd --stop
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
