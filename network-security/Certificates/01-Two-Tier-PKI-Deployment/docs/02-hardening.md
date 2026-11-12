@@ -1,33 +1,40 @@
-# 02 — Debian 13 hardening — completed preparation
+# 02 — Hardening Debian 13
 
-## Verified settings
+**Zakres: wykonane czynności udokumentowane w rozmowie.**
 
-| Item | Value |
-|---|---|
-| Linux distribution | Debian 13 |
-| Administration account | `pkiadmin` |
-| SSH | TCP 2352, Ed25519 client keys |
-| SSH root login | Disabled |
-| SSH password and keyboard interactive auth | Disabled |
-| UFW | Active; SSH restricted |
-| Admin umask | 0077 |
-| Lab gateway / primary DNS | `10.1.201.1` |
-| Backup public DNS during provisioning | `8.8.8.8` |
-| Time sync | systemd-timesyncd, Europe/Warsaw |
-| Audit | auditd; Wazuh monitoring on Issuing CA |
-| Malware scanner | ClamAV CLI on Issuing CA |
-| Lynis | Issuing CA 77/100 (2026-11-12) |
+## SSH
 
-## Verification-only commands
+- Osobne pary kluczy Ed25519 (klucze prywatne pozostają na stacji administracyjnej).
+- Port TCP `2352` na obu VM.
+- `PermitRootLogin no`, `PubkeyAuthentication yes`, `PasswordAuthentication no`, `KbdInteractiveAuthentication no`.
+- `X11Forwarding no`, `AllowTcpForwarding no`, `AllowAgentForwarding no`.
+- Test poprawnego logowania kluczem oraz test negatywny bez klucza; PuTTY zwrócił `server sent: publickey`.
 
-```bash
-hostnamectl
-timedatectl
-sudo ufw status verbose
-sudo sshd -T | grep -E '^(port|permitrootlogin|passwordauthentication|kbdinteractiveauthentication|pubkeyauthentication) '
-umask
-sudo auditctl -l
-sudo grep '^hardening_index=' /var/log/lynis-report.dat
-```
+![Parametry SSH](../screenshots/04-ssh-klucze-konfiguracja.png)
 
-Do not place private keys or sensitive command outputs in public screenshots. Redact secrets and environment-sensitive details.
+![Odmowa dostępu bez klucza](../screenshots/05-test-negatywny-ssh.png)
+
+## Firewall UFW
+
+UFW aktywny, domyślnie `deny incoming`, `allow outgoing`. Dostęp TCP `2352` dozwolony dla podsieci `10.1.201.0/24` oraz osobnego adresu źródłowego widocznego w konfiguracji podczas testów. Początkowo reguła tylko dla podsieci labowej odcięła SSH ze stacji administracyjnej; odzyskano dostęp przez konsolę Hyper-V i dopasowano reguły.
+
+**Do poprawy przed uznaniem za docelowe:** zawęzić uprawnienie całej podsieci do wybranych stacji i potwierdzić realny adres źródłowy. Sama zmiana portu SSH nie zapewnia izolacji.
+
+![UFW i SSH](../screenshots/03-ufw-ssh.png)
+
+## Dodatkowe zabezpieczenia
+
+- `umask 0077` dla konta `pkiadmin`.
+- Parametry jądra, między innymi `net.ipv4.ip_forward=0`, `net.ipv4.conf.all.accept_redirects=0`, `kernel.randomize_va_space=2`, `fs.suid_dumpable=0`.
+- Katalog `/etc/sudoers.d` zmieniony z `755` na `750` (uprawnienia pliku `/etc/sudoers`: `440`).
+- `auditd` i reguły audytu; obecność reguł wykazana w raporcie Lynis.
+- Synchronizacja czasu NTP potwierdzona na obu serwerach.
+- Na Issuing CA zainstalowany ClamAV CLI i aktualizator baz sygnatur.
+
+![Umask](../screenshots/06-umask.png)
+
+![Sudoers](../screenshots/08-uprawnienia-sudoers.png)
+
+![NTP](../screenshots/10-synchronizacja-ntp.png)
+
+**Rozdzielenie ról:** Root CA docelowo offline, bez połączenia SSH i bez sieci. Nie przechowywać jego klucza prywatnego na maszynie online.

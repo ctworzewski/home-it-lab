@@ -1,21 +1,35 @@
-# Keep CA keys, certificate databases and secrets OUT of Git
-**/private/
+# Klucze prywatne, certyfikaty i bazy CA nie trafiają do repozytorium
 *.key
 *.pem
 *.p12
 *.pfx
+*.p8
 *.ppk
 *.jks
 *.kdb
 *.srl
+*.db
+*.sqlite
+*.sqlite3
+*.backup
+*.bak
+*.enc
+*.secret
+*.secrets
+*.log
+*.csr
+*.crt
+*.crl
+*.cer
+*.der
+.env
+.env.*
+!*.example
+# OpenSSL CA runtime
+**/private/
+**/newcerts/
 **/index.txt*
 **/serial*
 **/crlnumber*
-*.pass
-*.secret
-*.bak
-*.backup
-*.sqlite
-.env
-.env.*
-# CA certificates and CRLs may be published deliberately, after review.
+**/rand
+**/.rnd

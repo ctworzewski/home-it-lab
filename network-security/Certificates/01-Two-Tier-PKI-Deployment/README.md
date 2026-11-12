@@ -1,77 +1,76 @@
-# Two-Tier PKI Deployment — Debian 13 (Home IT Lab)
+# Two-Tier PKI — Debian 13 | Home IT Lab
 
-> **Status:** Infrastructure preparation and hardening completed; CA deployment pending.
+> **Status projektu: W TRAKCIE REALIZACJI**  
+> **Etap 1 (10–12 listopada 2026): instalacja dwóch VM i hardening systemów — wykonany.**  
+> **Etap 2: konfiguracja Root CA offline i Issuing CA online — planowany.**
 
-A documented Home IT Lab project to build a two-tier Public Key Infrastructure (PKI) with an **offline Root CA** and an **online Issuing CA**, using Debian 13 and OpenSSL. The project focuses on isolation of cryptographic keys, certificate lifecycle, CRL/AIA publication, auditing and verification.
+Projekt dokumentuje budowę **dwupoziomowej infrastruktury klucza publicznego (PKI)** na dwóch maszynach wirtualnych Debian 13 w Home IT Lab. Docelowo Root CA ma być izolowany od sieci, a Issuing CA ma wystawiać certyfikaty dla usług laboratoryjnych. Nie jest to ukończone wdrożenie urzędu certyfikacji: obecny stan obejmuje przygotowanie i zabezpieczenie systemów.
 
-## Architecture
+## Architektura docelowa
 
 ```mermaid
 flowchart TD
-    ROOT[LAB-ROOT-CA\nDebian 13 / OpenSSL\nOffline after provisioning]
-    ISS[LAB-ISSUING-CA\nDebian 13 / OpenSSL\nOnline]
-    PUB[HTTP publication of CA certificates / CRLs\nplanned]
-    SVC[Lab services: Zabbix / Wazuh / n8n / Proxmox]
-    ROOT -->|Signs Issuing CA certificate via offline transfer| ISS
-    ISS -->|Issues TLS certificates| SVC
-    ISS -->|Publishes CRL / CA chain| PUB
+    R[LAB-ROOT-CA / Debian 13 / OFFLINE docelowo]
+    I[LAB-ISSUING-CA / Debian 13 / ONLINE]
+    S[Usługi Home IT Lab: Zabbix, Wazuh, n8n, Proxmox]
+    P[Publikacja certyfikatów CA i list CRL: planowana]
+    R -->|Podpisanie certyfikatu Issuing CA przy bezpiecznym transferze| I
+    I -->|Wydawanie certyfikatów TLS| S
+    I --> P
 ```
 
-| Role | Hostname | Lab IP | Target state |
-| --- | --- | --- | --- |
-| Root CA | `lab-root-ca` | `10.1.201.232/24` (provisioning only) | Offline, NIC disconnected |
-| Issuing CA | `lab-issuing-ca` | `10.1.201.231/24` | Online |
+| Element | LAB-ROOT-CA | LAB-ISSUING-CA |
+|---|---|---|
+| Hostname | `lab-root-ca` | `lab-issuing-ca` |
+| Adres w fazie przygotowania | `10.1.201.232/24` | `10.1.201.231/24` |
+| System | Debian 13 bez GUI | Debian 13 bez GUI |
+| SSH | TCP `2352`, tylko klucz Ed25519 | TCP `2352`, tylko klucz Ed25519 |
+| Tryb docelowy | OFFLINE, karta sieciowa odłączona | ONLINE |
 
-**Note:** The addresses are LAB examples, not production PKI. Root CA must not remain network-connected once its private key is present.
+## Co faktycznie wykonano
 
-## Current progress (2026-11-12)
+- [x] Dwie maszyny Hyper-V z Debianem 13, użytkownik `pkiadmin` z `sudo`.
+- [x] Stałe IP, brama `10.1.201.1`, DNS `10.1.201.1` i `8.8.8.8`, kontrola `apt update`.
+- [x] SSH na porcie `2352`; `PermitRootLogin no`, `PasswordAuthentication no`, `KbdInteractiveAuthentication no`.
+- [x] Osobne klucze Ed25519; test logowania z kluczem i odmowy bez klucza.
+- [x] UFW aktywny; dostęp SSH ograniczony regułami (do dalszego zawężenia).
+- [x] Parametry `sysctl`, `umask 0077`, uprawnienia `/etc/sudoers.d`.
+- [x] Uruchomiony `auditd`; w raporcie Lynis widoczne reguły audytu.
+- [x] Integracja z Wazuh na Issuing CA wykryta przez Lynis.
+- [x] ClamAV i `clamav-freshclam` na Issuing CA.
+- [x] Kontrola synchronizacji NTP na obu VM.
+- [x] Audyt Lynis; **Issuing CA: 71 → 76 → 77/100**, 258 testów, 0 ostrzeżeń w ostatnim raporcie.
 
-- [x] Two Debian 13 virtual machines created in Hyper-V
-- [x] Static IPs and DNS configured during provisioning
-- [x] OpenSSH on port `2352`; root SSH login disabled
-- [x] Separate Ed25519 SSH keys; password-based SSH authentication disabled and tested
-- [x] UFW enabled and SSH access controlled
-- [x] `umask 077` for the administration account
-- [x] Kernel hardening settings applied
-- [x] Lynis security audits performed (Issuing CA: **77/100**)
-- [x] `auditd` audit rules prepared; Wazuh agent visible in Issuing CA audit
-- [x] NTP time synchronization verified
-- [x] ClamAV command-line scanner installed on Issuing CA; signature updater enabled
-- [ ] Freeze architecture and publication hostnames
-- [ ] Secure, offline Root CA key generation and OpenSSL CA setup
-- [ ] Issuing CA key generation, CSR and offline signing
-- [ ] CA distribution, CRL/AIA publication and validation
-- [ ] Issue and validate first lab TLS certificate
-- [ ] Encrypted backups and recovery test
+## Dokumentacja z wykonanych prac
 
-The Lynis hardening index is a benchmark metric, **not a percentage of security**. No CA private keys have been generated as part of this repository.
+1. [Instalacja i sieć](docs/01-instalacja-i-siec.md)
+2. [Hardening systemów](docs/02-hardening.md)
+3. [Wyniki weryfikacji i Lynis](docs/03-audyt-i-testy.md)
+4. [Plan dalszego wdrożenia PKI](docs/04-plan-pki.md)
+5. [Galeria zrzutów z komentarzami](docs/05-zrzuty-ekranu.md)
 
-## Documentation
+### Wybrane zrzuty
 
-- [Architecture and security assumptions](docs/01-architecture.md)
-- [Debian preparation and hardening](docs/02-hardening.md)
-- [CA deployment plan](docs/03-deployment-plan.md)
-- [Verification checklist](docs/04-verification.md)
+**Firewall i SSH na obu maszynach:**
 
-## Repository layout
+![Reguły UFW i konfiguracja SSH](screenshots/03-ufw-ssh.png)
 
-```text
-01-Two-Tier-PKI-Deployment/
-├── README.md
-├── docs/
-├── configs/
-│   ├── root-ca/
-│   └── issuing-ca/
-├── scripts/
-└── screenshots/
-    ├── root-ca/
-    └── issuing-ca/
-```
+**Test negatywny: bez klucza nie da się zalogować:**
 
-## Important security rules
+![PuTTY odrzuca logowanie bez klucza](screenshots/05-test-negatywny-ssh.png)
 
-**Never commit** CA private keys, unencrypted backups, real passwords, token files, secrets, production CA databases or sensitive logs. Keep Root CA network-isolated after provisioning. Treat all examples as documentation, not copy-paste production configuration.
+**Synchronizacja czasu NTP:**
 
-## Scope
+![NTP na obu maszynach](screenshots/10-synchronizacja-ntp.png)
 
-Independent lab PKI is recommended; do not copy live production CA keys from CreoConcept into a lab. If migrating a real CA, treat it as a separate, formally planned task with secure transport and controls.
+## Co jest dopiero planowane
+
+- [ ] Rozstrzygnięcie: nowa, niezależna hierarchia laboratoryjna (zalecana), nie kopiowanie produkcyjnych kluczy CA.
+- [ ] Oddzielenie Root CA od sieci **przed** wygenerowaniem/przeniesieniem klucza prywatnego.
+- [ ] Konfiguracja OpenSSL dla obu CA i bezpieczny transfer CSR/certyfikatu.
+- [ ] Podpisanie certyfikatu Issuing CA przez offline Root CA.
+- [ ] Publikacja CA/CRL (AIA/CDP), obsługa odnowień i unieważnień.
+- [ ] Wystawienie certyfikatu TLS dla usługi labowej; weryfikacja łańcucha zaufania.
+- [ ] Szyfrowane backupy, test odtworzenia i procedura odnawiania CRL Root CA.
+
+> **Bezpieczeństwo repozytorium:** nie publikować kluczy prywatnych, sekretów, plików baz CA, kopii zapasowych ani danych produkcyjnych. Zdjęcia pochodzą z rzeczywistych prac w labie; przed opublikowaniem należy samodzielnie przejrzeć każdy screen pod kątem danych wewnętrznych. `77/100` to indeks Lynis, **nie procent bezpieczeństwa**. ClamAV CLI nie oznacza ochrony antywirusowej w czasie rzeczywistym.
