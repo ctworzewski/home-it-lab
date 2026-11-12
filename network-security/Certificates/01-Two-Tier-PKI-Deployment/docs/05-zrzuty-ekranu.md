@@ -41,3 +41,11 @@ Poniższe obrazy pochodzą ze zrzutów udostępnionych podczas konfiguracji 10�
 ## 10. Synchronizacja NTP obu serwerów
 
 ![Synchronizacja NTP obu serwerów](../screenshots/10-synchronizacja-ntp.png)
+
+## Etap 2 — przejście Root CA offline i przygotowanie OpenSSL
+
+- **Hyper-V przed izolacją:** ![Przed odłączeniem](../screenshots/11-root-ca-offline-hyperv-przed.png)
+- **Hyper-V po izolacji:** ![Po odłączeniu](../screenshots/12-root-ca-offline-hyperv-po.png)
+- **Konsola i test offline:** ![Kontrola izolacji](../screenshots/13-root-ca-test-izolacji.png)
+- **OpenSSL 3.5.7:** ![Wersja OpenSSL](../screenshots/14-root-ca-openssl-wersja.png)
+- **Katalogi bazy Root CA:** ![Katalogi Root CA](../screenshots/15-root-ca-struktura-katalogow.png)

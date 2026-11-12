@@ -1,76 +1,141 @@
-# Two-Tier PKI — Debian 13 | Home IT Lab
+# Two-Tier PKI na Debianie 13 — Home IT Lab
 
-> **Status projektu: W TRAKCIE REALIZACJI**  
-> **Etap 1 (10–12 listopada 2026): instalacja dwóch VM i hardening systemów — wykonany.**  
-> **Etap 2: konfiguracja Root CA offline i Issuing CA online — planowany.**
+> **Status: projekt w trakcie realizacji** · Ostatnia aktualizacja: **12 listopada 2026**  
+> **Zrobione:** instalacja i hardening dwóch VM, izolacja Root CA, przygotowanie katalogów OpenSSL na Root CA.  
+> **Jeszcze nie zrobione:** generowanie kluczy i certyfikatów CA, podpisanie Issuing CA, CRL/AIA, wystawienie certyfikatu TLS.
 
-Projekt dokumentuje budowę **dwupoziomowej infrastruktury klucza publicznego (PKI)** na dwóch maszynach wirtualnych Debian 13 w Home IT Lab. Docelowo Root CA ma być izolowany od sieci, a Issuing CA ma wystawiać certyfikaty dla usług laboratoryjnych. Nie jest to ukończone wdrożenie urzędu certyfikacji: obecny stan obejmuje przygotowanie i zabezpieczenie systemów.
+## Cel projektu
 
-## Architektura docelowa
+Projekt dokumentuje **budowę dwupoziomowej infrastruktury PKI** w środowisku Home IT Lab, z użyciem dwóch maszyn wirtualnych Debian 13 uruchomionych na Hyper-V. Docelowo **Root CA** będzie urzędem nadrzędnym, pracującym offline, a **Issuing CA** będzie wydawał certyfikaty usługom laboratoryjnym.
+
+To dokumentacja kolejnych, rzeczywiście wykonanych czynności, a nie opis gotowego już wdrożenia. Hierarchia jest **nowym projektem laboratoryjnym**, niezależnym od produkcyjnej infrastruktury CreoConcept.
+
+## Architektura i hosty
 
 ```mermaid
 flowchart TD
-    R[LAB-ROOT-CA / Debian 13 / OFFLINE docelowo]
-    I[LAB-ISSUING-CA / Debian 13 / ONLINE]
-    S[Usługi Home IT Lab: Zabbix, Wazuh, n8n, Proxmox]
-    P[Publikacja certyfikatów CA i list CRL: planowana]
-    R -->|Podpisanie certyfikatu Issuing CA przy bezpiecznym transferze| I
-    I -->|Wydawanie certyfikatów TLS| S
-    I --> P
+    ROOT["LAB-ROOT-CA • Debian 13 • OFFLINE"]
+    ISS["LAB-ISSUING-CA • Debian 13 • ONLINE"]
+    SRV["Usługi laboratoryjne • HTTPS/TLS"]
+    ROOT -->|"Podpisanie certyfikatu CA — planowane"| ISS
+    ISS -->|"Wydawanie certyfikatów — planowane"| SRV
 ```
 
-| Element | LAB-ROOT-CA | LAB-ISSUING-CA |
+| Parametr | LAB-ROOT-CA | LAB-ISSUING-CA |
 |---|---|---|
 | Hostname | `lab-root-ca` | `lab-issuing-ca` |
-| Adres w fazie przygotowania | `10.1.201.232/24` | `10.1.201.231/24` |
-| System | Debian 13 bez GUI | Debian 13 bez GUI |
-| SSH | TCP `2352`, tylko klucz Ed25519 | TCP `2352`, tylko klucz Ed25519 |
-| Tryb docelowy | OFFLINE, karta sieciowa odłączona | ONLINE |
+| IP w fazie konfiguracji | `10.1.201.232/24` | `10.1.201.231/24` |
+| System | Debian 13, bez GUI | Debian 13, bez GUI |
+| Konto | `pkiadmin` | `pkiadmin` |
+| SSH | Port `2352`, Ed25519; usługa obecnie wyłączona | Port `2352`, Ed25519 |
+| Sieć (aktualnie) | **Karta odłączona od vSwitch** | Online |
+| DNS (przed izolacją) | `10.1.201.1`, `8.8.8.8` | `10.1.201.1`, `8.8.8.8` |
 
-## Co faktycznie wykonano
+> Uwaga: przed odłączeniem sieci oba serwery zostały skonfigurowane z bramą `10.1.201.1`. Obecność zapisanej konfiguracji IP na offline Root CA **nie oznacza aktywnej łączności**.
 
-- [x] Dwie maszyny Hyper-V z Debianem 13, użytkownik `pkiadmin` z `sudo`.
-- [x] Stałe IP, brama `10.1.201.1`, DNS `10.1.201.1` i `8.8.8.8`, kontrola `apt update`.
-- [x] SSH na porcie `2352`; `PermitRootLogin no`, `PasswordAuthentication no`, `KbdInteractiveAuthentication no`.
-- [x] Osobne klucze Ed25519; test logowania z kluczem i odmowy bez klucza.
-- [x] UFW aktywny; dostęp SSH ograniczony regułami (do dalszego zawężenia).
-- [x] Parametry `sysctl`, `umask 0077`, uprawnienia `/etc/sudoers.d`.
-- [x] Uruchomiony `auditd`; w raporcie Lynis widoczne reguły audytu.
-- [x] Integracja z Wazuh na Issuing CA wykryta przez Lynis.
-- [x] ClamAV i `clamav-freshclam` na Issuing CA.
-- [x] Kontrola synchronizacji NTP na obu VM.
-- [x] Audyt Lynis; **Issuing CA: 71 → 76 → 77/100**, 258 testów, 0 ostrzeżeń w ostatnim raporcie.
+## Dziennik wykonanych prac
 
-## Dokumentacja z wykonanych prac
+### Etap 1 — Instalacja i zabezpieczenie systemów (wykonany)
 
-1. [Instalacja i sieć](docs/01-instalacja-i-siec.md)
-2. [Hardening systemów](docs/02-hardening.md)
-3. [Wyniki weryfikacji i Lynis](docs/03-audyt-i-testy.md)
-4. [Plan dalszego wdrożenia PKI](docs/04-plan-pki.md)
-5. [Galeria zrzutów z komentarzami](docs/05-zrzuty-ekranu.md)
+- [x] Utworzenie dwóch VM i instalacja Debian 13 bez GUI.
+- [x] Konfiguracja sieci statycznej, repozytoriów APT i DNS; testy rozwiązywania nazw.
+- [x] Utworzenie konta `pkiadmin` z `sudo`.
+- [x] SSH na porcie `2352`, `PermitRootLogin no`, `PasswordAuthentication no`, `KbdInteractiveAuthentication no`.
+- [x] Oddzielne klucze SSH Ed25519 i test odmowy logowania bez klucza.
+- [x] UFW: domyślne blokowanie ruchu przychodzącego, dopuszczone wybrane źródła do SSH.
+- [x] `umask 0077`, podstawowy hardening `sysctl`, uprawnienia `/etc/sudoers.d` (`750`).
+- [x] `auditd` i raportowanie zdarzeń; integracja Wazuh wykryta w raporcie Issuing CA.
+- [x] Instalacja ClamAV na Issuing CA; wykrywanie przez Lynis.
+- [x] Weryfikacja NTP na obu serwerach przed izolacją Root CA.
+- [x] Lynis na Issuing CA: **71 → 76 → 77/100** (ostatni audyt: 258 testów, **0 ostrzeżeń**, 36 sugestii).
 
-### Wybrane zrzuty
+**Instalacja dwóch serwerów:**
 
-**Firewall i SSH na obu maszynach:**
+![Instalacja Debiana na dwóch VM](screenshots/01-instalacja-dwoch-vm.png)
 
-![Reguły UFW i konfiguracja SSH](screenshots/03-ufw-ssh.png)
+**UFW i skuteczne ustawienia SSH:**
 
-**Test negatywny: bez klucza nie da się zalogować:**
+![UFW i SSH na obu VM](screenshots/03-ufw-ssh.png)
 
-![PuTTY odrzuca logowanie bez klucza](screenshots/05-test-negatywny-ssh.png)
+**Test negatywny SSH: logowanie bez klucza odrzucone:**
 
-**Synchronizacja czasu NTP:**
+![PuTTY odrzuca brak klucza prywatnego](screenshots/05-test-negatywny-ssh.png)
 
-![NTP na obu maszynach](screenshots/10-synchronizacja-ntp.png)
+**ClamAV i aktualizator sygnatur:**
 
-## Co jest dopiero planowane
+![ClamAV Freshclam na Issuing CA](screenshots/09-clamav-freshclam.png)
 
-- [ ] Rozstrzygnięcie: nowa, niezależna hierarchia laboratoryjna (zalecana), nie kopiowanie produkcyjnych kluczy CA.
-- [ ] Oddzielenie Root CA od sieci **przed** wygenerowaniem/przeniesieniem klucza prywatnego.
-- [ ] Konfiguracja OpenSSL dla obu CA i bezpieczny transfer CSR/certyfikatu.
-- [ ] Podpisanie certyfikatu Issuing CA przez offline Root CA.
-- [ ] Publikacja CA/CRL (AIA/CDP), obsługa odnowień i unieważnień.
-- [ ] Wystawienie certyfikatu TLS dla usługi labowej; weryfikacja łańcucha zaufania.
-- [ ] Szyfrowane backupy, test odtworzenia i procedura odnawiania CRL Root CA.
+**Synchronizacja czasu przed izolacją:**
 
-> **Bezpieczeństwo repozytorium:** nie publikować kluczy prywatnych, sekretów, plików baz CA, kopii zapasowych ani danych produkcyjnych. Zdjęcia pochodzą z rzeczywistych prac w labie; przed opublikowaniem należy samodzielnie przejrzeć każdy screen pod kątem danych wewnętrznych. `77/100` to indeks Lynis, **nie procent bezpieczeństwa**. ClamAV CLI nie oznacza ochrony antywirusowej w czasie rzeczywistym.
+![NTP na obu VM](screenshots/10-synchronizacja-ntp.png)
+
+### Etap 2 — Odłączenie Root CA i przygotowanie OpenSSL (częściowo wykonany)
+
+- [x] Zweryfikowano OpenSSL **3.5.7** na LAB-ROOT-CA.
+- [x] Utworzono `/opt/pki/root/{certs,crl,csr,newcerts,private}`.
+- [x] Utworzono puste `index.txt` oraz inicjalizacyjne `serial` i `crlnumber` o wartości `1000`.
+- [x] Nadano katalogowi kluczy `private` uprawnienia `700`, plikom bazy `600` i właściciela `root:root`.
+- [x] Wyłączono SSH na Root CA (`systemctl disable --now ssh`).
+- [x] Wyłączono VM, odłączono jej kartę od vSwitch Hyper-V i ponownie uruchomiono przez konsolę.
+- [x] Potwierdzono `NO-CARRIER`, brak łączności z `10.1.201.1`, SSH `inactive`.
+- [ ] Przygotować `/opt/pki/root/openssl.cnf`.
+- [ ] Wygenerować zaszyfrowany klucz prywatny i certyfikat Root CA.
+
+**OpenSSL na Root CA:**
+
+![Weryfikacja wersji OpenSSL](screenshots/14-root-ca-openssl-wersja.png)
+
+**Struktura katalogów Root CA:**
+
+![Katalogi i pliki bazy OpenSSL](screenshots/15-root-ca-struktura-katalogow.png)
+
+**Hyper-V — przed odłączeniem:**
+
+![Root CA z kartą podłączoną do vSwitch](screenshots/11-root-ca-offline-hyperv-przed.png)
+
+**Hyper-V — po odłączeniu (Brak połączenia):**
+
+![Root CA bez połączenia z przełącznikiem](screenshots/12-root-ca-offline-hyperv-po.png)
+
+**Weryfikacja na konsoli offline VM:**
+
+![Root CA: brak łączności z siecią, SSH inactive](screenshots/13-root-ca-test-izolacji.png)
+
+**Ważne:** po odłączeniu od sieci Root CA nie ma aktywnej synchronizacji NTP. Przed podpisywaniem certyfikatów należy zweryfikować czas z wiarygodnym źródłem. Zegar Hyper-V i lokalna konsola nie zastępują izolowanego źródła zaufanego czasu.
+
+## Co dalej (nie wykonano)
+
+1. Przygotowanie konfiguracji OpenSSL dla Root CA i określenie okresów ważności, AIA/CDP i polityki CA.
+2. Wygenerowanie klucza oraz samopodpisanego certyfikatu Root CA na odłączonej maszynie.
+3. Przygotowanie Issuing CA i utworzenie CSR.
+4. Kontrolowane przeniesienie CSR do offline Root CA i podpisanie certyfikatu Issuing CA.
+5. Publikacja certyfikatów urzędów i list CRL; zaplanowanie odnawiania CRL Root CA.
+6. Wystawienie testowego certyfikatu TLS z SAN i sprawdzenie łańcucha zaufania.
+
+## Dodatkowe zabezpieczenia Root CA — zalecane, ale **niewdrożone w tym labie**
+
+W tym etapie zastosowano izolację sieciową i wyłączenie SSH. Poniższe działania pozostają **świadomie niewdrożone** i nie są przedstawiane jako wykonane:
+
+| Zalecenie | Dlaczego warto je rozważyć? |
+|---|---|
+| Wyłączyć checkpointy Hyper-V oraz przejrzeć już istniejące | Punkty kontrolne mogą przechowywać dodatkowe kopie stanu VM, także materiału kluczowego; checkpoint nie zastępuje backupu. |
+| Ograniczyć uprawnienia do VHDX i hosta Hyper-V | Administrator hosta lub osoba, która przejmie host, może uzyskać dostęp do danych VM mimo odłączonej sieci. |
+| Szyfrować wolumin magazynujący VHDX | Ogranicza ryzyko odczytu danych z nośnika po jego utracie; nie chroni przed przejętym, uruchomionym hostem. |
+| Utrzymywać osobne, szyfrowane backupy CA i okresowo testować odtworzenie | Awaria lub utrata offline Root CA może uniemożliwić utrzymanie hierarchii PKI. Backup powinien objąć klucz, certyfikat, bazę, numerację, konfigurację i CRL. |
+| Ograniczyć użycie klucza i zabezpieczyć hasło | Klucz prywatny Root CA jest najważniejszym sekretem całej hierarchii. |
+
+> **Ryzyko zaakceptowane w labie:** odłączona karta sieciowa nie chroni przed dostępem administratora Hyper-V do plików maszyny. Brak niezależnego backupu stanowi ryzyko utraty CA. W środowisku produkcyjnym takie ryzyka wymagają osobnej oceny.
+
+## Dokumentacja szczegółowa
+
+- [01 — Instalacja i sieć](docs/01-instalacja-i-siec.md)
+- [02 — Hardening](docs/02-hardening.md)
+- [03 — Audyt i testy](docs/03-audyt-i-testy.md)
+- [04 — Plan PKI](docs/04-plan-pki.md)
+- [05 — Galeria zrzutów](docs/05-zrzuty-ekranu.md)
+
+## Bezpieczeństwo publikacji
+
+**Nie umieszczaj w GitHubie:** kluczy prywatnych (`*.key`, `*.pem`, `*.ppk`), haseł, kopii baz certyfikatów CA, backupów VM, sekretów ani nieprzejrzanych logów. Plik `.gitignore` ogranicza ryzyko przypadkowego dodania części takich danych, ale **nie zastępuje ręcznej kontroli `git diff --cached`**. Zrzuty pokazują rzeczywiste środowisko laboratoryjne, w tym nazwy hostów i adresy prywatne — przed publikacją sprawdź każdy obraz.
+
+> **Hardening Index Lynis nie jest procentowym wskaźnikiem bezpieczeństwa.** ClamAV w trybie CLI nie zapewnia skanowania w czasie rzeczywistym.
