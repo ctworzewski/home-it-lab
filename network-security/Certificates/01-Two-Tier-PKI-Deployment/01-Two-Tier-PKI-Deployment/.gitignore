@@ -1,0 +1,21 @@
+# Keep CA keys, certificate databases and secrets OUT of Git
+**/private/
+*.key
+*.pem
+*.p12
+*.pfx
+*.ppk
+*.jks
+*.kdb
+*.srl
+**/index.txt*
+**/serial*
+**/crlnumber*
+*.pass
+*.secret
+*.bak
+*.backup
+*.sqlite
+.env
+.env.*
+# CA certificates and CRLs may be published deliberately, after review.
