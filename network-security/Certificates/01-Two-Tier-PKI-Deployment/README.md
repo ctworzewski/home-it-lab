@@ -1,141 +1,152 @@
 # Two-Tier PKI na Debianie 13 — Home IT Lab
 
-> **Status: projekt w trakcie realizacji** · Ostatnia aktualizacja: **12 listopada 2026**  
-> **Zrobione:** instalacja i hardening dwóch VM, izolacja Root CA, przygotowanie katalogów OpenSSL na Root CA.  
-> **Jeszcze nie zrobione:** generowanie kluczy i certyfikatów CA, podpisanie Issuing CA, CRL/AIA, wystawienie certyfikatu TLS.
+> **Status: wdrożenie w toku** · **Aktualizacja: 16 listopada 2026 r.**  
+> ✅ Root CA offline — utworzony • ✅ Certyfikat Issuing CA — podpisany i zweryfikowany • ⏳ Dystrybucja certyfikatów, CRL/AIA i testy HTTPS — w przygotowaniu.
 
-## Cel projektu
+Projekt dokumentuje **rzeczywistą, etapową budowę własnej dwupoziomowej infrastruktury klucza publicznego (PKI)** na dwóch VM z Debianem 13 w Hyper-V. Dokumentacja jest po polsku; zawiera wykorzystane polecenia, wyniki testów, zrzuty ekranu oraz celowo niewdrożone zalecenia. Jest to **środowisko laboratoryjne niezależne od produkcyjnego PKI**.
 
-Projekt dokumentuje **budowę dwupoziomowej infrastruktury PKI** w środowisku Home IT Lab, z użyciem dwóch maszyn wirtualnych Debian 13 uruchomionych na Hyper-V. Docelowo **Root CA** będzie urzędem nadrzędnym, pracującym offline, a **Issuing CA** będzie wydawał certyfikaty usługom laboratoryjnym.
-
-To dokumentacja kolejnych, rzeczywiście wykonanych czynności, a nie opis gotowego już wdrożenia. Hierarchia jest **nowym projektem laboratoryjnym**, niezależnym od produkcyjnej infrastruktury CreoConcept.
-
-## Architektura i hosty
+## Architektura
 
 ```mermaid
-flowchart TD
-    ROOT["LAB-ROOT-CA • Debian 13 • OFFLINE"]
-    ISS["LAB-ISSUING-CA • Debian 13 • ONLINE"]
-    SRV["Usługi laboratoryjne • HTTPS/TLS"]
-    ROOT -->|"Podpisanie certyfikatu CA — planowane"| ISS
-    ISS -->|"Wydawanie certyfikatów — planowane"| SRV
+flowchart TB
+  ROOT["LAB-ROOT-CA — Debian 13, OFFLINE"]
+  ISS["LAB-ISSUING-CA — Debian 13, ONLINE"]
+  TLS["Przyszłe certyfikaty serwerowe HTTPS"]
+  ROOT -->|"Podpisano certyfikat Issuing CA — 16.11.2026"| ISS
+  ISS -.->|"Planowane wystawianie"| TLS
 ```
 
-| Parametr | LAB-ROOT-CA | LAB-ISSUING-CA |
+| Parametr | Root CA | Issuing CA |
 |---|---|---|
-| Hostname | `lab-root-ca` | `lab-issuing-ca` |
-| IP w fazie konfiguracji | `10.1.201.232/24` | `10.1.201.231/24` |
-| System | Debian 13, bez GUI | Debian 13, bez GUI |
-| Konto | `pkiadmin` | `pkiadmin` |
-| SSH | Port `2352`, Ed25519; usługa obecnie wyłączona | Port `2352`, Ed25519 |
-| Sieć (aktualnie) | **Karta odłączona od vSwitch** | Online |
-| DNS (przed izolacją) | `10.1.201.1`, `8.8.8.8` | `10.1.201.1`, `8.8.8.8` |
+| Host | `lab-root-ca` | `lab-issuing-ca` |
+| Adres podczas przygotowania | `10.1.201.232/24` | `10.1.201.231/24` |
+| Dostęp | Konsola Hyper-V, sieć odłączona | SSH 2352 + Ed25519 |
+| System / OpenSSL | Debian 13 / 3.5.7 | Debian 13 / 3.5.7 |
+| Rola | Podpisuje certyfikaty podrzędnych CA | Docelowo wystawia certyfikaty TLS |
+| Klucz CA | RSA 4096, szyfrowany AES-256 | RSA 4096, szyfrowany AES-256 |
 
-> Uwaga: przed odłączeniem sieci oba serwery zostały skonfigurowane z bramą `10.1.201.1`. Obecność zapisanej konfiguracji IP na offline Root CA **nie oznacza aktywnej łączności**.
+## Historia postępów
 
-## Dziennik wykonanych prac
+### 12.11.2026 — instalacja i hardening dwóch serwerów
 
-### Etap 1 — Instalacja i zabezpieczenie systemów (wykonany)
+Zainstalowałem Debiana 13 bez GUI na dwóch VM, przygotowałem statyczne IP i DNS (`10.1.201.1`, `8.8.8.8`), repozytoria, `sudo` oraz SSH z osobnymi kluczami Ed25519 na porcie 2352. Wyłączyłem uwierzytelnianie hasłem i zdalne logowanie `root`; negatywny test logowania bez klucza został odrzucony.
 
-- [x] Utworzenie dwóch VM i instalacja Debian 13 bez GUI.
-- [x] Konfiguracja sieci statycznej, repozytoriów APT i DNS; testy rozwiązywania nazw.
-- [x] Utworzenie konta `pkiadmin` z `sudo`.
-- [x] SSH na porcie `2352`, `PermitRootLogin no`, `PasswordAuthentication no`, `KbdInteractiveAuthentication no`.
-- [x] Oddzielne klucze SSH Ed25519 i test odmowy logowania bez klucza.
-- [x] UFW: domyślne blokowanie ruchu przychodzącego, dopuszczone wybrane źródła do SSH.
-- [x] `umask 0077`, podstawowy hardening `sysctl`, uprawnienia `/etc/sudoers.d` (`750`).
-- [x] `auditd` i raportowanie zdarzeń; integracja Wazuh wykryta w raporcie Issuing CA.
-- [x] Instalacja ClamAV na Issuing CA; wykrywanie przez Lynis.
-- [x] Weryfikacja NTP na obu serwerach przed izolacją Root CA.
-- [x] Lynis na Issuing CA: **71 → 76 → 77/100** (ostatni audyt: 258 testów, **0 ostrzeżeń**, 36 sugestii).
+Wdrożyłem UFW, podstawowy hardening `sysctl`, `umask 0077`, audyt systemowy i monitoring Wazuh. Na Issuing CA dodałem ClamAV oraz aktualizację sygnatur. Pierwszy audyt Lynis miał **71/100**, później wynik wzrósł do **77/100** na Issuing CA. Hardening Index **nie jest procentem bezpieczeństwa systemu**.
 
-**Instalacja dwóch serwerów:**
+![Reguły UFW i parametry SSH](screenshots/03-ufw-ssh.png)
 
-![Instalacja Debiana na dwóch VM](screenshots/01-instalacja-dwoch-vm.png)
+![Test odmowy logowania bez klucza](screenshots/05-test-negatywny-ssh.png)
 
-**UFW i skuteczne ustawienia SSH:**
+![ClamAV na Issuing CA](screenshots/09-clamav-freshclam.png)
 
-![UFW i SSH na obu VM](screenshots/03-ufw-ssh.png)
+Następnie odłączyłem `LAB-ROOT-CA` od vSwitch w Hyper-V i wyłączyłem usługę SSH. Test wykazał `eth0 DOWN`, brak połączenia z bramą oraz nieaktywny SSH. W ten sposób **Root CA działa bez połączenia sieciowego**, ale wciąż zależy od bezpieczeństwa hosta Hyper-V.
 
-**Test negatywny SSH: logowanie bez klucza odrzucone:**
+![Hyper-V: karta sieciowa bez połączenia](screenshots/12-root-ca-offline-hyperv-po.png)
 
-![PuTTY odrzuca brak klucza prywatnego](screenshots/05-test-negatywny-ssh.png)
+![Test izolacji sieciowej na konsoli](screenshots/13-root-ca-test-izolacji.png)
 
-**ClamAV i aktualizator sygnatur:**
+### 16.11.2026 — klucz i certyfikat Root CA
 
-![ClamAV Freshclam na Issuing CA](screenshots/09-clamav-freshclam.png)
+Na offline `LAB-ROOT-CA` przygotowałem `/opt/pki/root`, bazę CA (`index.txt`, `serial`, `crlnumber`) i konfigurację OpenSSL. Wygenerowałem zaszyfrowany klucz RSA 4096, następnie samopodpisany certyfikat **Home IT Lab Root CA** z rozszerzeniami `CA:TRUE, pathlen:1` i `keyCertSign, cRLSign`.
 
-**Synchronizacja czasu przed izolacją:**
+- **Wystawca i podmiot:** `C=PL, O=Home IT Lab, OU=PKI, CN=Home IT Lab Root CA`.
+- **Ważność:** od 16.11.2026 13:03:19 UTC do 13.11.2036 13:03:19 UTC.
+- **Weryfikacja:** `openssl verify` z certyfikatem Root CA jako punktem zaufania zakończyło się `OK`.
 
-![NTP na obu VM](screenshots/10-synchronizacja-ntp.png)
+![Wygenerowany certyfikat Root CA: subject, issuer, ważność](screenshots/2026-11-16/11-root-ca-generowanie-certyfikatu.png)
 
-### Etap 2 — Odłączenie Root CA i przygotowanie OpenSSL (częściowo wykonany)
+### 16.11.2026 — przygotowanie Issuing CA i CSR
 
-- [x] Zweryfikowano OpenSSL **3.5.7** na LAB-ROOT-CA.
-- [x] Utworzono `/opt/pki/root/{certs,crl,csr,newcerts,private}`.
-- [x] Utworzono puste `index.txt` oraz inicjalizacyjne `serial` i `crlnumber` o wartości `1000`.
-- [x] Nadano katalogowi kluczy `private` uprawnienia `700`, plikom bazy `600` i właściciela `root:root`.
-- [x] Wyłączono SSH na Root CA (`systemctl disable --now ssh`).
-- [x] Wyłączono VM, odłączono jej kartę od vSwitch Hyper-V i ponownie uruchomiono przez konsolę.
-- [x] Potwierdzono `NO-CARRIER`, brak łączności z `10.1.201.1`, SSH `inactive`.
-- [ ] Przygotować `/opt/pki/root/openssl.cnf`.
-- [ ] Wygenerować zaszyfrowany klucz prywatny i certyfikat Root CA.
+Na `LAB-ISSUING-CA` przygotowałem bazę CA i katalogi pod `/opt/pki/intermediate`, konfigurację `openssl.cnf` oraz osobny szyfrowany klucz RSA 4096. Wygenerowałem żądanie podpisania certyfikatu (`CSR`) dla **Home IT Lab Issuing CA 01**. Wynik weryfikacji: `Certificate request self-signature verify OK`.
 
-**OpenSSL na Root CA:**
+![Weryfikacja CSR na Issuing CA](screenshots/2026-11-16/12-issuing-ca-csr-weryfikacja.png)
 
-![Weryfikacja wersji OpenSSL](screenshots/14-root-ca-openssl-wersja.png)
+![Wieczorny test CSR i uprawnień klucza na Issuing CA](screenshots/2026-11-16/03-issuing-ca-klucz-i-csr.png)
 
-**Struktura katalogów Root CA:**
+### 16.11.2026 — transfer CSR bez włączania sieci Root CA
 
-![Katalogi i pliki bazy OpenSSL](screenshots/15-root-ca-struktura-katalogow.png)
+Ze względu na problemy z funkcją **„Wpisz tekst ze schowka”** w konsoli VMConnect, przygotowywałem pliki konfiguracyjne na Windowsie, następnie tworzyłem z nich obrazy **ISO w AnyBurn**. Pliki ISO montowałem na offline Debianie jako nośniki wyłącznie do odczytu. Tą samą drogą trafił na Root CA publiczny CSR z Issuing CA — **bez przenoszenia prywatnego klucza** i bez uruchamiania SSH na Root CA.
 
-**Hyper-V — przed odłączeniem:**
+Początkowo myliłem `/dev/sr0` i `/dev/sr1`, dlatego przed montowaniem sprawdzałem `lsblk -f` oraz `blkid`; prawidłowy nośnik pojawił się jako `iso9660` na `/dev/sr0`. Przeniesiony CSR zweryfikowałem ponownie.
 
-![Root CA z kartą podłączoną do vSwitch](screenshots/11-root-ca-offline-hyperv-przed.png)
+![Podłączenie obrazu ISO i odczyt jego zawartości](screenshots/2026-11-16/09-transfer-przez-iso.png)
 
-**Hyper-V — po odłączeniu (Brak połączenia):**
+![Weryfikacja CSR na offline Root CA](screenshots/2026-11-16/06-csr-przeniesiony-do-root-ca.png)
 
-![Root CA bez połączenia z przełącznikiem](screenshots/12-root-ca-offline-hyperv-po.png)
+### 16.11.2026 — podpisanie Issuing CA przez Root CA
 
-**Weryfikacja na konsoli offline VM:**
+Na offline Root CA podpisałem istniejący CSR poleceniem `openssl ca`, z osobnym plikiem rozszerzeń X.509 dla CA podrzędnego. Przed podpisaniem zmieniłem adresy publikacji z roboczego `pki.cyber.local` na **`pki.tworzewski.pl`**. W UniFi dodałem odpowiadającą nazwę DNS Host (A); faktyczna dostępność usług HTTP i poprawność odpowiedzi DNS są jeszcze do przetestowania.
 
-![Root CA: brak łączności z siecią, SSH inactive](screenshots/13-root-ca-test-izolacji.png)
+**Parametry wystawionego certyfikatu Issuing CA:**
 
-**Ważne:** po odłączeniu od sieci Root CA nie ma aktywnej synchronizacji NTP. Przed podpisywaniem certyfikatów należy zweryfikować czas z wiarygodnym źródłem. Zegar Hyper-V i lokalna konsola nie zastępują izolowanego źródła zaufanego czasu.
-
-## Co dalej (nie wykonano)
-
-1. Przygotowanie konfiguracji OpenSSL dla Root CA i określenie okresów ważności, AIA/CDP i polityki CA.
-2. Wygenerowanie klucza oraz samopodpisanego certyfikatu Root CA na odłączonej maszynie.
-3. Przygotowanie Issuing CA i utworzenie CSR.
-4. Kontrolowane przeniesienie CSR do offline Root CA i podpisanie certyfikatu Issuing CA.
-5. Publikacja certyfikatów urzędów i list CRL; zaplanowanie odnawiania CRL Root CA.
-6. Wystawienie testowego certyfikatu TLS z SAN i sprawdzenie łańcucha zaufania.
-
-## Dodatkowe zabezpieczenia Root CA — zalecane, ale **niewdrożone w tym labie**
-
-W tym etapie zastosowano izolację sieciową i wyłączenie SSH. Poniższe działania pozostają **świadomie niewdrożone** i nie są przedstawiane jako wykonane:
-
-| Zalecenie | Dlaczego warto je rozważyć? |
+| Parametr | Potwierdzona wartość |
 |---|---|
-| Wyłączyć checkpointy Hyper-V oraz przejrzeć już istniejące | Punkty kontrolne mogą przechowywać dodatkowe kopie stanu VM, także materiału kluczowego; checkpoint nie zastępuje backupu. |
-| Ograniczyć uprawnienia do VHDX i hosta Hyper-V | Administrator hosta lub osoba, która przejmie host, może uzyskać dostęp do danych VM mimo odłączonej sieci. |
-| Szyfrować wolumin magazynujący VHDX | Ogranicza ryzyko odczytu danych z nośnika po jego utracie; nie chroni przed przejętym, uruchomionym hostem. |
-| Utrzymywać osobne, szyfrowane backupy CA i okresowo testować odtworzenie | Awaria lub utrata offline Root CA może uniemożliwić utrzymanie hierarchii PKI. Backup powinien objąć klucz, certyfikat, bazę, numerację, konfigurację i CRL. |
-| Ograniczyć użycie klucza i zabezpieczyć hasło | Klucz prywatny Root CA jest najważniejszym sekretem całej hierarchii. |
+| Subject | `Home IT Lab Issuing CA 01` |
+| Issuer | `Home IT Lab Root CA` |
+| Ważność | 16.11.2026 14:29:38 UTC – 15.11.2031 14:29:38 UTC |
+| Basic Constraints | `CA:TRUE, pathlen:0` (critical) |
+| Key Usage | `Certificate Sign, CRL Sign` (critical) |
+| AIA | `http://pki.tworzewski.pl/ca/root-ca.cert.pem` |
+| CRL Distribution Point | `http://pki.tworzewski.pl/crl/root-ca.crl` |
+| Podpis | SHA-256 z RSA |
 
-> **Ryzyko zaakceptowane w labie:** odłączona karta sieciowa nie chroni przed dostępem administratora Hyper-V do plików maszyny. Brak niezależnego backupu stanowi ryzyko utraty CA. W środowisku produkcyjnym takie ryzyka wymagają osobnej oceny.
+![Konfiguracja rozszerzeń dla Issuing CA](screenshots/2026-11-16/07-konfiguracja-rozszerzen-ca.png)
 
-## Dokumentacja szczegółowa
+![Podpisanie CSR i zatwierdzenie wystawienia](screenshots/2026-11-16/05-podpisanie-issuing-ca.png)
 
-- [01 — Instalacja i sieć](docs/01-instalacja-i-siec.md)
-- [02 — Hardening](docs/02-hardening.md)
-- [03 — Audyt i testy](docs/03-audyt-i-testy.md)
-- [04 — Plan PKI](docs/04-plan-pki.md)
-- [05 — Galeria zrzutów](docs/05-zrzuty-ekranu.md)
+![Rozszerzenia wystawionego certyfikatu](screenshots/2026-11-16/04-issuing-ca-x509-aia-crl.png)
 
-## Bezpieczeństwo publikacji
+### 16.11.2026 wieczorem — powtórna weryfikacja
 
-**Nie umieszczaj w GitHubie:** kluczy prywatnych (`*.key`, `*.pem`, `*.ppk`), haseł, kopii baz certyfikatów CA, backupów VM, sekretów ani nieprzejrzanych logów. Plik `.gitignore` ogranicza ryzyko przypadkowego dodania części takich danych, ale **nie zastępuje ręcznej kontroli `git diff --cached`**. Zrzuty pokazują rzeczywiste środowisko laboratoryjne, w tym nazwy hostów i adresy prywatne — przed publikacją sprawdź każdy obraz.
+Po podpisaniu wykonałem ponowny test offline na Root CA:
 
-> **Hardening Index Lynis nie jest procentowym wskaźnikiem bezpieczeństwa.** ClamAV w trybie CLI nie zapewnia skanowania w czasie rzeczywistym.
+```bash
+sudo openssl verify -CAfile /opt/pki/root/certs/root-ca.cert.pem /opt/pki/root/certs/issuing-ca.cert.pem
+# /opt/pki/root/certs/issuing-ca.cert.pem: OK
+```
+
+Wynik `OK` potwierdza poprawność podpisu i łańcucha względem wskazanego zaufanego Root CA. **Nie jest to jeszcze potwierdzenie dostępności CRL ani skuteczności sprawdzania unieważnień.**
+
+![Wieczorem: status offline, dane obu certyfikatów i data](screenshots/2026-11-16/01-root-ca-offline-i-certyfikaty.png)
+
+![Wieczorem: poprawność łańcucha i brak synchronizacji czasu offline](screenshots/2026-11-16/02-weryfikacja-lancucha-i-czas.png)
+
+W chwili weryfikacji: `eth0 DOWN`, SSH `inactive`, `System clock synchronized: no` — oczekiwane przy pracy offline. Czas przed operacjami podpisywania należy sprawdzać niezależnie. Na Issuing CA wynik Lynis nadal wynosił **77/100** (zgłoszony po ponownym audycie).
+
+## Aktualny stan i kolejne kroki
+
+- [x] Dwie maszyny Debian 13 i hardening dostępu SSH.
+- [x] Root CA odłączony od sieci w Hyper-V.
+- [x] Zaszyfrowany klucz i samopodpisany certyfikat Root CA.
+- [x] Klucz Issuing CA i CSR — weryfikacja OK.
+- [x] CSR przeniesiony nośnikiem ISO na offline Root CA.
+- [x] Certyfikat Issuing CA podpisany, AIA/CRL wskazują na `pki.tworzewski.pl`.
+- [x] Podpis i łańcuch certyfikatów zweryfikowane lokalnie (`openssl verify`: OK).
+- [ ] Przenieść **publiczne** certyfikaty Root/Issuing CA z offline VM na Issuing CA (np. kontrolowanym VHDX).
+- [ ] Skonfigurować DNS i Nginx, opublikować certyfikaty CA oraz listy CRL w formacie DER.
+- [ ] Przygotować pierwsze CRL i procedurę odnawiania CRL Root CA offline.
+- [ ] Sprawdzić HTTP AIA/CRL z hostów klienckich i poprawność sprawdzania unieważnień.
+- [ ] Wystawić pierwszy certyfikat TLS z SAN i zweryfikować HTTPS na kliencie.
+- [ ] Sprawdzić Wazuh/auditd i uruchomić testy odtwarzania CA.
+
+**Uwaga:** adresy publikacji w certyfikacie nie oznaczają, że wymienione pliki są już udostępniane. Projekt nie jest jeszcze gotową produkcyjną usługą PKI.
+
+## Dodatkowe zabezpieczenia Root CA — zalecane, ale niewdrożone w tym labie
+
+W tej iteracji **nie wdrożyłem** poniższych zaleceń. Opisuję je, ponieważ izolacja sieciowa VM **nie chroni przed administratorem hosta Hyper-V, dostępem do VHDX ani utratą dysku**.
+
+| Zalecenie | Dlaczego ma znaczenie |
+|---|---|
+| Ograniczenie checkpointów Hyper-V | Zmniejsza liczbę dodatkowych kopii stanu VM, mogących zawierać materiał kryptograficzny; checkpoint nie jest backupem. |
+| Ochrona hosta i VHDX (ACL, kontrola dostępu, szyfrowanie woluminu) | Ogranicza ryzyko dostępu do plików CA przez osoby z uprawnieniami do hosta. |
+| Niezależny, zaszyfrowany backup Root CA i bazy CA | Umożliwia odzyskanie hierarchii po uszkodzeniu VM, bez ujawnienia klucza. |
+| Próbne odtwarzanie backupu w odizolowanym środowisku | Weryfikuje, czy kopia rzeczywiście pozwala odzyskać CA. |
+| Kontrolowana wymiana danych z offline CA | Ogranicza ryzyko podmiany CSR lub niepożądanych plików na nośniku. |
+
+**Ryzyko świadomie zaakceptowane w laboratorium:** brak kopii bezpieczeństwa może oznaczać utratę klucza CA i konieczność zbudowania hierarchii od początku. Nie należy kopiować tego podejścia do środowiska produkcyjnego.
+
+## Ochrona sekretów i publikacja
+
+Do repozytorium nie trafiają: klucze prywatne, hasła, pliki `.ppk`, pliki bazy wystawionych certyfikatów czy backupy. Zrzuty ekranu zostały dołączone jako rzeczywista dokumentacja; **przed publikacją trzeba świadomie zaakceptować widoczne w nich nazwy hostów, domeny, adresy IP i daty**. Publiczne certyfikaty i CSR nie są sekretami, ale w tej paczce celowo nie dołączam samych plików kryptograficznych.
+
+**Materiały szczegółowe:** [Dziennik wdrożenia](docs/06-etap-2-pki-2026-11-16.md) · [Etapy i zadania](docs/04-plan-pki.md) · [Zrzuty](docs/05-zrzuty-ekranu.md).

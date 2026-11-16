@@ -49,3 +49,19 @@ Poniższe obrazy pochodzą ze zrzutów udostępnionych podczas konfiguracji 10�
 - **Konsola i test offline:** ![Kontrola izolacji](../screenshots/13-root-ca-test-izolacji.png)
 - **OpenSSL 3.5.7:** ![Wersja OpenSSL](../screenshots/14-root-ca-openssl-wersja.png)
 - **Katalogi bazy Root CA:** ![Katalogi Root CA](../screenshots/15-root-ca-struktura-katalogow.png)
+
+
+## 16 listopada 2026 — Root CA i Issuing CA
+
+- [01-root-ca-offline-i-certyfikaty.png](../screenshots/2026-11-16/01-root-ca-offline-i-certyfikaty.png)
+- [02-weryfikacja-lancucha-i-czas.png](../screenshots/2026-11-16/02-weryfikacja-lancucha-i-czas.png)
+- [03-issuing-ca-klucz-i-csr.png](../screenshots/2026-11-16/03-issuing-ca-klucz-i-csr.png)
+- [04-issuing-ca-x509-aia-crl.png](../screenshots/2026-11-16/04-issuing-ca-x509-aia-crl.png)
+- [05-podpisanie-issuing-ca.png](../screenshots/2026-11-16/05-podpisanie-issuing-ca.png)
+- [06-csr-przeniesiony-do-root-ca.png](../screenshots/2026-11-16/06-csr-przeniesiony-do-root-ca.png)
+- [07-konfiguracja-rozszerzen-ca.png](../screenshots/2026-11-16/07-konfiguracja-rozszerzen-ca.png)
+- [08-potwierdzenie-podpisu.png](../screenshots/2026-11-16/08-potwierdzenie-podpisu.png)
+- [09-transfer-przez-iso.png](../screenshots/2026-11-16/09-transfer-przez-iso.png)
+- [10-dns-unifi-pki.png](../screenshots/2026-11-16/10-dns-unifi-pki.png)
+- [11-root-ca-generowanie-certyfikatu.png](../screenshots/2026-11-16/11-root-ca-generowanie-certyfikatu.png)
+- [12-issuing-ca-csr-weryfikacja.png](../screenshots/2026-11-16/12-issuing-ca-csr-weryfikacja.png)
