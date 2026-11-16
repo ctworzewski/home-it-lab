@@ -33,3 +33,13 @@
 **/crlnumber*
 **/rand
 **/.rnd
+
+# PKI private material and machine disks
+*.key.pem
+*.ppk
+*.p12
+*.pfx
+*.vhdx
+*.iso
+*.pass
+*.secret

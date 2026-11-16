@@ -65,3 +65,19 @@ Poniższe obrazy pochodzą ze zrzutów udostępnionych podczas konfiguracji 10�
 - [10-dns-unifi-pki.png](../screenshots/2026-11-16/10-dns-unifi-pki.png)
 - [11-root-ca-generowanie-certyfikatu.png](../screenshots/2026-11-16/11-root-ca-generowanie-certyfikatu.png)
 - [12-issuing-ca-csr-weryfikacja.png](../screenshots/2026-11-16/12-issuing-ca-csr-weryfikacja.png)
+
+
+## 16–17.11.2026 — transfer VHDX, Nginx i CRL
+
+- [01-transfer-ext4-root-ca.png](../screenshots/2026-11-16-17/01-transfer-ext4-root-ca.png)
+- [02-transfer-ext4-issuing-ca.png](../screenshots/2026-11-16-17/02-transfer-ext4-issuing-ca.png)
+- [03-weryfikacja-transferu-na-issuing.png](../screenshots/2026-11-16-17/03-weryfikacja-transferu-na-issuing.png)
+- [04-nginx-ufw-na-issuing.png](../screenshots/2026-11-16-17/04-nginx-ufw-na-issuing.png)
+- [05-pobieranie-certyfikatu-przegladarka.png](../screenshots/2026-11-16-17/05-pobieranie-certyfikatu-przegladarka.png)
+- [06-root-ca-crl-openssl-verify.png](../screenshots/2026-11-16-17/06-root-ca-crl-openssl-verify.png)
+- [07-konwersja-crl-transfer-vhdx.png](../screenshots/2026-11-16-17/07-konwersja-crl-transfer-vhdx.png)
+- [08-test-zapisu-na-vhdx.png](../screenshots/2026-11-16-17/08-test-zapisu-na-vhdx.png)
+- [09-dysk-transferowy-ext4.png](../screenshots/2026-11-16-17/09-dysk-transferowy-ext4.png)
+- [10-problem-fat32-na-windows.png](../screenshots/2026-11-16-17/10-problem-fat32-na-windows.png)
+- [11-weryfikacja-zawartosci-vhdx.png](../screenshots/2026-11-16-17/11-weryfikacja-zawartosci-vhdx.png)
+- [12-transfer-certyfikatow-z-root-ca.png](../screenshots/2026-11-16-17/12-transfer-certyfikatow-z-root-ca.png)

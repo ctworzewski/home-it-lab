@@ -1,7 +1,7 @@
 # Two-Tier PKI na Debianie 13 — Home IT Lab
 
-> **Status: wdrożenie w toku** · **Aktualizacja: 16 listopada 2026 r.**  
-> ✅ Root CA offline — utworzony • ✅ Certyfikat Issuing CA — podpisany i zweryfikowany • ⏳ Dystrybucja certyfikatów, CRL/AIA i testy HTTPS — w przygotowaniu.
+> **Status: wdrożenie w toku** · **Aktualizacja: 17 listopada 2026 r.**  
+> ✅ Root CA offline i Issuing CA — utworzone • ✅ Certyfikaty i CRL opublikowane przez Nginx • ⏳ Test TLS z SAN i odwołanie certyfikatu — kolejne etapy.
 
 Projekt dokumentuje **rzeczywistą, etapową budowę własnej dwupoziomowej infrastruktury klucza publicznego (PKI)** na dwóch VM z Debianem 13 w Hyper-V. Dokumentacja jest po polsku; zawiera wykorzystane polecenia, wyniki testów, zrzuty ekranu oraz celowo niewdrożone zalecenia. Jest to **środowisko laboratoryjne niezależne od produkcyjnego PKI**.
 
@@ -75,7 +75,7 @@ Początkowo myliłem `/dev/sr0` i `/dev/sr1`, dlatego przed montowaniem sprawdza
 
 ### 16.11.2026 — podpisanie Issuing CA przez Root CA
 
-Na offline Root CA podpisałem istniejący CSR poleceniem `openssl ca`, z osobnym plikiem rozszerzeń X.509 dla CA podrzędnego. Przed podpisaniem zmieniłem adresy publikacji z roboczego `pki.cyber.local` na **`pki.tworzewski.pl`**. W UniFi dodałem odpowiadającą nazwę DNS Host (A); faktyczna dostępność usług HTTP i poprawność odpowiedzi DNS są jeszcze do przetestowania.
+Na offline Root CA podpisałem istniejący CSR poleceniem `openssl ca`, z osobnym plikiem rozszerzeń X.509 dla CA podrzędnego. Przed podpisaniem zmieniłem adresy publikacji z roboczego `pki.cyber.local` na **`pki.tworzewski.pl`**. W UniFi dodałem rekord DNS Host (A), który następnie rozwiązywał się jako `10.1.201.231`. Dostępność plików HTTP została potwierdzona w kolejnym etapie.
 
 **Parametry wystawionego certyfikatu Issuing CA:**
 
@@ -113,23 +113,72 @@ Wynik `OK` potwierdza poprawność podpisu i łańcucha względem wskazanego zau
 
 W chwili weryfikacji: `eth0 DOWN`, SSH `inactive`, `System clock synchronized: no` — oczekiwane przy pracy offline. Czas przed operacjami podpisywania należy sprawdzać niezależnie. Na Issuing CA wynik Lynis nadal wynosił **77/100** (zgłoszony po ponownym audycie).
 
+## 16/17.11.2026 — transfer publicznych certyfikatów z offline Root CA
+
+Po podpisaniu Issuing CA przeniosłem dwa **publiczne** certyfikaty (`root-ca.cert.pem` i `issuing-ca.cert.pem`) z `LAB-ROOT-CA` na `LAB-ISSUING-CA`, bez włączania sieci Root CA. Wykorzystałem odłączany VHDX w Hyper-V. Pierwsze podejście z FAT32 było nieudane: pliki były widoczne przed odmontowaniem, ale znikały przy kolejnych podłączeniach (potwierdzone także testowym plikiem). Nie ustalono jednoznacznie, co powodowało problem — w dokumentacji nie przypisuję go z pewnością samemu FAT32.
+
+Następnie na **wydzielonym dysku transferowym 1 GB** utworzyłem ext4, skopiowałem certyfikaty i sprawdziłem, że pozostały po odmontowaniu i ponownym zamontowaniu. Po odłączeniu dysku od Root CA i podłączeniu go do Issuing CA odczytałem pliki w trybie `ro,noload` i umieściłem w `/opt/pki/intermediate/certs/`. Wynik:
+
+```text
+/opt/pki/intermediate/certs/issuing-ca.cert.pem: OK
+```
+
+![Weryfikacja zapisu na ext4 na Root CA](screenshots/2026-11-16-17/01-transfer-ext4-root-ca.png)
+
+![Transferowy VHDX widoczny na Issuing CA](screenshots/2026-11-16-17/02-transfer-ext4-issuing-ca.png)
+
+![Odczyt certyfikatów na Issuing CA](screenshots/2026-11-16-17/03-weryfikacja-transferu-na-issuing.png)
+
+## 17.11.2026 — Nginx, DNS oraz publikacja certyfikatów CA
+
+Na online `LAB-ISSUING-CA` zainstalowałem Nginx 1.26.3, utworzyłem `/var/www/pki/ca` i `/var/www/pki/crl`, skonfigurowałem wirtualny host `pki.tworzewski.pl` i port HTTP 80 dostępny z `10.1.201.0/24` w UFW. Test `nginx -t` zakończył się powodzeniem, `getent ahostsv4 pki.tworzewski.pl` wskazał `10.1.201.231`. Serwer udostępnia pliki bez katalogowego `autoindex`.
+
+Dla obu certyfikatów HTTP zwrócił **200 OK**, a pobrana treść została prawidłowo rozpoznana przez `openssl x509 -noout -subject -issuer`:
+
+- `http://pki.tworzewski.pl/ca/root-ca.cert.pem` — subject/issuer: `Home IT Lab Root CA`;
+- `http://pki.tworzewski.pl/ca/issuing-ca.cert.pem` — subject: `Home IT Lab Issuing CA 01`, issuer: `Home IT Lab Root CA`.
+
+![Nginx, status usługi i UFW](screenshots/2026-11-16-17/04-nginx-ufw-na-issuing.png)
+
+![Pobranie certyfikatu przez przeglądarkę](screenshots/2026-11-16-17/05-pobieranie-certyfikatu-przegladarka.png)
+
+**Dlaczego HTTP?** Pliki CA i listy CRL są weryfikowane kryptograficznie; HTTP pozwala uniknąć zależności cyklicznej przy weryfikacji certyfikatów serwera publikacji. Nie jest to panel administracyjny. Obecna konfiguracja UFW pozwala na port 80 z podsieci `10.1.201.0/24`; dostęp z innych sieci wymaga dodatkowych testów i reguł.
+
+## 17.11.2026 — pierwsze CRL i ręczne odnawianie
+
+Na **LAB-ISSUING-CA** wygenerowałem listę CRL podpisaną kluczem Issuing CA, sprawdziłem ją, skonwertowałem do DER i udostępniłem przez Nginx. Następnie ponowiłem ręczną operację, uzyskując poprawną weryfikację podpisu `verify OK` i zgodność dat między lokalnym a opublikowanym plikiem.
+
+Na **LAB-ROOT-CA** (offline) wygenerowałem i zweryfikowałem CRL Root CA (`verify OK`), przekonwertowałem do DER, przeniosłem przez ext4 VHDX i opublikowałem na Issuing CA. Odczyt obu URL przez `curl | openssl crl -inform DER` działał prawidłowo.
+
+| Udostępniony zasób | Wynik testu | Ostatnio potwierdzone `nextUpdate` (UTC) |
+|---|---|---|
+| `/crl/root-ca.crl` | HTTP 200, podpis zweryfikowany | 15.05.2027, 23:20:11 |
+| `/crl/issuing-ca.crl` | HTTP 200, odczyt i podpis poprawne | 23.11.2026, 23:34:58 |
+
+![Generowanie i weryfikacja CRL Root CA](screenshots/2026-11-16-17/06-root-ca-crl-openssl-verify.png)
+
+![Konwersja i przeniesienie CRL](screenshots/2026-11-16-17/07-konwersja-crl-transfer-vhdx.png)
+
+**Odnawianie CRL Issuing CA jest ręczne.** Klucz `issuing-ca.key.pem` pozostaje zaszyfrowany i przy `openssl ca -gencrl` trzeba podać hasło interaktywnie. Na serwerze przygotowano plik `/usr/local/sbin/renew-issuing-crl.sh`, ale **nie potwierdzono wykonania całego skryptu**; nie włączono timera systemd ani automatycznego podawania hasła. Operacja potwierdzona w logach to ręczna generacja, weryfikacja podpisu, konwersja do DER i atomowa podmiana opublikowanej CRL.
+
+Root CA CRL trzeba odnawiać osobno przez offline VM, z zachowaniem procedury transferu. Daty `nextUpdate` są terminami ważności konkretnych opublikowanych list, a nie deklaracją stałego harmonogramu.
+
 ## Aktualny stan i kolejne kroki
 
-- [x] Dwie maszyny Debian 13 i hardening dostępu SSH.
-- [x] Root CA odłączony od sieci w Hyper-V.
-- [x] Zaszyfrowany klucz i samopodpisany certyfikat Root CA.
-- [x] Klucz Issuing CA i CSR — weryfikacja OK.
-- [x] CSR przeniesiony nośnikiem ISO na offline Root CA.
-- [x] Certyfikat Issuing CA podpisany, AIA/CRL wskazują na `pki.tworzewski.pl`.
-- [x] Podpis i łańcuch certyfikatów zweryfikowane lokalnie (`openssl verify`: OK).
-- [ ] Przenieść **publiczne** certyfikaty Root/Issuing CA z offline VM na Issuing CA (np. kontrolowanym VHDX).
-- [ ] Skonfigurować DNS i Nginx, opublikować certyfikaty CA oraz listy CRL w formacie DER.
-- [ ] Przygotować pierwsze CRL i procedurę odnawiania CRL Root CA offline.
-- [ ] Sprawdzić HTTP AIA/CRL z hostów klienckich i poprawność sprawdzania unieważnień.
-- [ ] Wystawić pierwszy certyfikat TLS z SAN i zweryfikować HTTPS na kliencie.
-- [ ] Sprawdzić Wazuh/auditd i uruchomić testy odtwarzania CA.
+- [x] Dwa serwery Debian 13, hardening SSH/UFW, monitoring/audyt.
+- [x] Root CA offline, szyfrowany klucz RSA 4096 i certyfikat Root CA.
+- [x] Osobny klucz Issuing CA, CSR, podpis CA i weryfikacja łańcucha.
+- [x] Transfer plików konfiguracyjnych i CSR przez ISO.
+- [x] Transfer dwóch publicznych certyfikatów przez VHDX z ext4.
+- [x] Nginx, lokalny DNS `pki.tworzewski.pl`, testy HTTP 200 i odczyt certyfikatów.
+- [x] Dwie listy CRL w formacie DER, publikowane w HTTP; ręczne odnowienie Issuing CRL.
+- [ ] Test dostępności HTTP AIA/CRL z innych VLAN-ów i końcowych klientów.
+- [ ] Wystawić pierwszy certyfikat serwerowy z SAN i uruchomić HTTPS.
+- [ ] Przetestować rzeczywiste sprawdzanie odwołania certyfikatu końcowego.
+- [ ] Ustalić procedurę regularnego ręcznego odnawiania CRL przed `nextUpdate`.
+- [ ] Przetestować odtwarzanie PKI z kopii (backup Root CA nie został wdrożony).
 
-**Uwaga:** adresy publikacji w certyfikacie nie oznaczają, że wymienione pliki są już udostępniane. Projekt nie jest jeszcze gotową produkcyjną usługą PKI.
+**Zakres potwierdzenia:** `openssl verify: OK` potwierdza poprawność ścieżki podpisów, ale nie dowodzi, że wszyscy klienci automatycznie ufają Root CA ani że weryfikują listy CRL. Również test HTTP wykonany na Issuing CA nie zastępuje testów z docelowych VLAN-ów.
 
 ## Dodatkowe zabezpieczenia Root CA — zalecane, ale niewdrożone w tym labie
 
@@ -149,4 +198,4 @@ W tej iteracji **nie wdrożyłem** poniższych zaleceń. Opisuję je, ponieważ 
 
 Do repozytorium nie trafiają: klucze prywatne, hasła, pliki `.ppk`, pliki bazy wystawionych certyfikatów czy backupy. Zrzuty ekranu zostały dołączone jako rzeczywista dokumentacja; **przed publikacją trzeba świadomie zaakceptować widoczne w nich nazwy hostów, domeny, adresy IP i daty**. Publiczne certyfikaty i CSR nie są sekretami, ale w tej paczce celowo nie dołączam samych plików kryptograficznych.
 
-**Materiały szczegółowe:** [Dziennik wdrożenia](docs/06-etap-2-pki-2026-11-16.md) · [Etapy i zadania](docs/04-plan-pki.md) · [Zrzuty](docs/05-zrzuty-ekranu.md).
+**Materiały szczegółowe:** [Dziennik utworzenia CA](docs/06-etap-2-pki-2026-11-16.md) · [Transfer i publikacja AIA/CRL](docs/07-transfer-publikacja-crl-2026-11-17.md) · [Zrzuty](docs/05-zrzuty-ekranu.md).
