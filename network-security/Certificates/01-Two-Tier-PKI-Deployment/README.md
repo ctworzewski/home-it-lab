@@ -1,7 +1,8 @@
 # Two-Tier PKI na Debianie 13 — Home IT Lab
 
-> **Status: wdrożenie w toku** · **Aktualizacja: 17 listopada 2026 r.**  
-> ✅ Root CA offline i Issuing CA — utworzone • ✅ Certyfikaty i CRL opublikowane przez Nginx • ⏳ Test TLS z SAN i odwołanie certyfikatu — kolejne etapy.
+> **Status: zakończony w ustalonym zakresie** · **Aktualizacja: 17 listopada 2026 r.**  
+> ✅ Offline Root CA i online Issuing CA • ✅ Publikacja AIA/CRL • ✅ Certyfikat TLS Wazuh i zaufanie Windows/Chrome • ✅ Weryfikacja certyfikatu z `-crl_check_all`  
+> **Poza zakresem zakończonej iteracji:** test faktycznego unieważnienia certyfikatu, automatyzacja odnowień oraz odtworzenie z backupu.
 
 Projekt dokumentuje **rzeczywistą, etapową budowę własnej dwupoziomowej infrastruktury klucza publicznego (PKI)** na dwóch VM z Debianem 13 w Hyper-V. Dokumentacja jest po polsku; zawiera wykorzystane polecenia, wyniki testów, zrzuty ekranu oraz celowo niewdrożone zalecenia. Jest to **środowisko laboratoryjne niezależne od produkcyjnego PKI**.
 
@@ -11,9 +12,9 @@ Projekt dokumentuje **rzeczywistą, etapową budowę własnej dwupoziomowej infr
 flowchart TB
   ROOT["LAB-ROOT-CA — Debian 13, OFFLINE"]
   ISS["LAB-ISSUING-CA — Debian 13, ONLINE"]
-  TLS["Przyszłe certyfikaty serwerowe HTTPS"]
+  TLS["Wazuh Dashboard — wazuh.tworzewski.pl"]
   ROOT -->|"Podpisano certyfikat Issuing CA — 16.11.2026"| ISS
-  ISS -.->|"Planowane wystawianie"| TLS
+  ISS -->|"Certyfikat TLS wystawiony 17.11.2026"| TLS
 ```
 
 | Parametr | Root CA | Issuing CA |
@@ -22,7 +23,7 @@ flowchart TB
 | Adres podczas przygotowania | `10.1.201.232/24` | `10.1.201.231/24` |
 | Dostęp | Konsola Hyper-V, sieć odłączona | SSH 2352 + Ed25519 |
 | System / OpenSSL | Debian 13 / 3.5.7 | Debian 13 / 3.5.7 |
-| Rola | Podpisuje certyfikaty podrzędnych CA | Docelowo wystawia certyfikaty TLS |
+| Rola | Podpisuje certyfikaty podrzędnych CA | Wystawia certyfikaty TLS |
 | Klucz CA | RSA 4096, szyfrowany AES-256 | RSA 4096, szyfrowany AES-256 |
 
 ## Historia postępów
@@ -163,7 +164,57 @@ Na **LAB-ROOT-CA** (offline) wygenerowałem i zweryfikowałem CRL Root CA (`veri
 
 Root CA CRL trzeba odnawiać osobno przez offline VM, z zachowaniem procedury transferu. Daty `nextUpdate` są terminami ważności konkretnych opublikowanych list, a nie deklaracją stałego harmonogramu.
 
-## Aktualny stan i kolejne kroki
+## 17.11.2026 — pierwszy certyfikat HTTPS: Wazuh Dashboard
+
+Migrację wykonano dla `wazuh.tworzewski.pl` (`10.1.201.201`). Dotychczasowa usługa Wazuh Dashboard działała bezpośrednio na HTTPS 443, z plikami `/etc/wazuh-dashboard/certs/wazuh-dashboard.pem` i `wazuh-dashboard-key.pem`. Poprzedni certyfikat pochodził od `Tworzewski LAB Root CA`; nie był to nowy urząd `Home IT Lab Root CA`.
+
+**Wydanie i uruchomienie:**
+
+1. Na serwerze Wazuh wykonano kopię dotychczasowych plików i przygotowano osobny klucz RSA 4096 oraz CSR (bez przesyłania klucza prywatnego do Issuing CA).
+2. CSR przeniesiono przez Windows/MobaXterm. `openssl req -verify` potwierdził podpis CSR i SAN: `DNS:wazuh.tworzewski.pl`, `IP:10.1.201.201`.
+3. W pliku `openssl.cnf` Issuing CA poprawiono pozostałe stare punkty `pki.cyber.local` na `pki.tworzewski.pl`. Pozostawiono `copy_extensions = none`, a SAN i profil TLS podano jawnie w `wazuh-server-ext.cnf` (`CA:FALSE`, `serverAuth`, odpowiednie Key Usage, AIA i CDP).
+4. Pierwszą próbę wystawienia przerwano przed potwierdzeniem, a przy kolejnej wpisano niepoprawne hasło klucza CA (`bad decrypt`). Test `openssl pkey -check -noout` zakończył się `Key is valid`; podpisanie powtórzono i zatwierdzono. OpenSSL zwrócił `Database updated`.
+5. Certyfikat wystawiono na **365 dni**: `notBefore=Nov 16 23:57:05 2026 GMT`, `notAfter=Nov 16 23:57:05 2027 GMT`, z wystawcą `Home IT Lab Issuing CA 01`.
+6. Na serwer Wazuh przeniesiono publiczny *fullchain* (certyfikat serwera + certyfikat Issuing CA), zachowując klucz prywatny wyłącznie na Wazuh. Zmieniono dwie ścieżki `server.ssl.key` i `server.ssl.certificate`, po czym uruchomiono ponownie `wazuh-dashboard`.
+7. Po restarcie usługa miała status `active (running)`, `curl -k -I https://127.0.0.1/` zwrócił `302 Found` do `/app/login?`, a `openssl s_client` pokazał nowy certyfikat i jego wystawcę.
+8. Początkowo Chrome oznaczał stronę jako niezabezpieczoną. Po pobraniu publicznego certyfikatu Root CA i dodaniu go do magazynu zaufanych urzędów Windows ostrzeżenie zniknęło. Dla bezpieczeństwa odcisk Root CA należy porównać ze źródłem zaufanym przed importem.
+
+**Testy końcowe:**
+
+```bash
+# LAB-ISSUING-CA — poprawny łańcuch i nazwa DNS
+sudo openssl verify \
+  -CAfile /opt/pki/intermediate/certs/root-ca.cert.pem \
+  -untrusted /opt/pki/intermediate/certs/issuing-ca.cert.pem \
+  -purpose sslserver -verify_hostname wazuh.tworzewski.pl \
+  /opt/pki/intermediate/certs/wazuh.cert.pem
+# /opt/pki/intermediate/certs/wazuh.cert.pem: OK
+```
+
+Po przygotowaniu zestawu PEM zawierającego **Root CA CRL i Issuing CA CRL** wykonano także:
+
+```bash
+sudo openssl verify \
+  -CAfile /opt/pki/intermediate/certs/root-ca.cert.pem \
+  -untrusted /opt/pki/intermediate/certs/issuing-ca.cert.pem \
+  -CRLfile /tmp/pki-crls.pem \
+  -crl_check_all -purpose sslserver \
+  -verify_hostname wazuh.tworzewski.pl \
+  /opt/pki/intermediate/certs/wazuh.cert.pem
+# /opt/pki/intermediate/certs/wazuh.cert.pem: OK
+```
+
+To potwierdza, że w chwili testu certyfikat Wazuh przeszedł kontrolę ścieżki zaufania i dostarczonych list CRL. **Nie testowano rzeczywistego cofnięcia certyfikatu ani automatycznej kontroli CRL przez Chrome.**
+
+![Podpisanie i weryfikacja certyfikatu Wazuh](screenshots/2026-11-17-wazuh/04-podpis-i-weryfikacja-certyfikatu.png)
+
+![Przeglądarka po instalacji certyfikatu Root CA](screenshots/2026-11-17-wazuh/07-chrome-po-zaufaniu-root-ca.png)
+
+![Weryfikacja `-crl_check_all` — OK](screenshots/2026-11-17-wazuh/08-pelny-test-crl-verify-ok.png)
+
+Pełny opis i procedura ręcznego odnawiania: **[Wazuh: CSR, podpis, wdrożenie, walidacja](docs/08-wazuh-dashboard-https-2026-11-17.md)**.
+
+## Stan końcowy i ograniczenia
 
 - [x] Dwa serwery Debian 13, hardening SSH/UFW, monitoring/audyt.
 - [x] Root CA offline, szyfrowany klucz RSA 4096 i certyfikat Root CA.
@@ -173,12 +224,14 @@ Root CA CRL trzeba odnawiać osobno przez offline VM, z zachowaniem procedury tr
 - [x] Nginx, lokalny DNS `pki.tworzewski.pl`, testy HTTP 200 i odczyt certyfikatów.
 - [x] Dwie listy CRL w formacie DER, publikowane w HTTP; ręczne odnowienie Issuing CRL.
 - [ ] Test dostępności HTTP AIA/CRL z innych VLAN-ów i końcowych klientów.
-- [ ] Wystawić pierwszy certyfikat serwerowy z SAN i uruchomić HTTPS.
-- [ ] Przetestować rzeczywiste sprawdzanie odwołania certyfikatu końcowego.
+- [x] Wystawić certyfikat serwerowy z SAN i uruchomić HTTPS dla `wazuh.tworzewski.pl`.
+- [x] Zainstalować publiczny Root CA w magazynie Windows i potwierdzić brak ostrzeżenia w Chrome.
+- [x] Zweryfikować certyfikat Wazuh przez OpenSSL z obydwiema listami CRL (`-crl_check_all`).
+- [ ] Przetestować faktyczne **unieważnienie testowego** certyfikatu i wykrycie `certificate revoked` (poza zakresem tej iteracji).
 - [ ] Ustalić procedurę regularnego ręcznego odnawiania CRL przed `nextUpdate`.
 - [ ] Przetestować odtwarzanie PKI z kopii (backup Root CA nie został wdrożony).
 
-**Zakres potwierdzenia:** `openssl verify: OK` potwierdza poprawność ścieżki podpisów, ale nie dowodzi, że wszyscy klienci automatycznie ufają Root CA ani że weryfikują listy CRL. Również test HTTP wykonany na Issuing CA nie zastępuje testów z docelowych VLAN-ów.
+**Zakres potwierdzenia:** Windows/Chrome przestał zgłaszać ostrzeżenie po dodaniu zaufanego Root CA; OpenSSL zweryfikował certyfikat Wazuh wraz z dwoma podanymi CRL. Nie potwierdza to sprawdzania unieważnień przez wszystkich klientów ani dostępności AIA/CRL z każdego VLAN-u.
 
 ## Dodatkowe zabezpieczenia Root CA — zalecane, ale niewdrożone w tym labie
 
@@ -198,4 +251,4 @@ W tej iteracji **nie wdrożyłem** poniższych zaleceń. Opisuję je, ponieważ 
 
 Do repozytorium nie trafiają: klucze prywatne, hasła, pliki `.ppk`, pliki bazy wystawionych certyfikatów czy backupy. Zrzuty ekranu zostały dołączone jako rzeczywista dokumentacja; **przed publikacją trzeba świadomie zaakceptować widoczne w nich nazwy hostów, domeny, adresy IP i daty**. Publiczne certyfikaty i CSR nie są sekretami, ale w tej paczce celowo nie dołączam samych plików kryptograficznych.
 
-**Materiały szczegółowe:** [Dziennik utworzenia CA](docs/06-etap-2-pki-2026-11-16.md) · [Transfer i publikacja AIA/CRL](docs/07-transfer-publikacja-crl-2026-11-17.md) · [Zrzuty](docs/05-zrzuty-ekranu.md).
+**Materiały szczegółowe:** [Dziennik utworzenia CA](docs/06-etap-2-pki-2026-11-16.md) · [Transfer i publikacja AIA/CRL](docs/07-transfer-publikacja-crl-2026-11-17.md) · [Certyfikat HTTPS Wazuh](docs/08-wazuh-dashboard-https-2026-11-17.md) · [Zrzuty](docs/05-zrzuty-ekranu.md).

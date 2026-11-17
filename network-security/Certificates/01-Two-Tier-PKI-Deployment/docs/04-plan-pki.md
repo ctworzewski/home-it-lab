@@ -14,4 +14,4 @@ Root CA i Issuing CA zostały utworzone; Issuing CA podpisał offline Root CA. �
 **Niewdrożone:** checkpoint policy, dodatkowe zabezpieczenia VHDX/hosta i zaszyfrowany backup Root CA (świadomie odłożone na później w tym labie).
 
 
-> Aktualny stan po wykonaniu etapów 16–17 listopada i pozostające zadania: [README](../README.md#aktualny-stan-i-kolejne-kroki).
+> Aktualny stan po wykonaniu etapów 16–17 listopada i pozostające zadania: [README](../README.md#stan-końcowy-i-ograniczenia).

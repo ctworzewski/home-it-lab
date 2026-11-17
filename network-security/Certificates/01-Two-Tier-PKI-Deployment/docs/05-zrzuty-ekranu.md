@@ -81,3 +81,15 @@ Poniższe obrazy pochodzą ze zrzutów udostępnionych podczas konfiguracji 10�
 - [10-problem-fat32-na-windows.png](../screenshots/2026-11-16-17/10-problem-fat32-na-windows.png)
 - [11-weryfikacja-zawartosci-vhdx.png](../screenshots/2026-11-16-17/11-weryfikacja-zawartosci-vhdx.png)
 - [12-transfer-certyfikatow-z-root-ca.png](../screenshots/2026-11-16-17/12-transfer-certyfikatow-z-root-ca.png)
+
+
+## 17.11.2026 — wdrożenie HTTPS Wazuh
+
+- [01-obecny-certyfikat-wazuh.png](../screenshots/2026-11-17-wazuh/01-obecny-certyfikat-wazuh.png)
+- [02-poprawka-aia-crl-issuing.png](../screenshots/2026-11-17-wazuh/02-poprawka-aia-crl-issuing.png)
+- [03-podpisywanie-i-test-hasla.png](../screenshots/2026-11-17-wazuh/03-podpisywanie-i-test-hasla.png)
+- [04-podpis-i-weryfikacja-certyfikatu.png](../screenshots/2026-11-17-wazuh/04-podpis-i-weryfikacja-certyfikatu.png)
+- [05-chrome-przed-zaufaniem-root-ca.png](../screenshots/2026-11-17-wazuh/05-chrome-przed-zaufaniem-root-ca.png)
+- [06-pobranie-root-ca-windows.png](../screenshots/2026-11-17-wazuh/06-pobranie-root-ca-windows.png)
+- [07-chrome-po-zaufaniu-root-ca.png](../screenshots/2026-11-17-wazuh/07-chrome-po-zaufaniu-root-ca.png)
+- [08-pelny-test-crl-verify-ok.png](../screenshots/2026-11-17-wazuh/08-pelny-test-crl-verify-ok.png)
